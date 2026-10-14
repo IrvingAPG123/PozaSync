@@ -75,4 +75,4 @@ Implementar una plataforma digital de servicios técnicos y de mantenimiento loc
 * **Memoria RAM:** Mínimo 8 GB (Recomendado: 16 GB para ejecución simultánea de emuladores y servidor).
 * **Almacenamiento:** Mínimo 10 GB de espacio libre en disco (SSD recomendado).
 * **Dispositivo Móvil (Opcional para pruebas):** Dispositivo Android/iOS con modo depuración USB activado o emulador configurado.
- 7b4928f424eb11835bbc6ca836665baf35d8908a
+  

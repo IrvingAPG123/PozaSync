@@ -64,7 +64,7 @@ Implementar una plataforma digital de servicios técnicos y de mantenimiento loc
 ## 4. Requisitos de Hardware y Software
 
 ### Requisitos de Software
-* **Sistema Operativo:** Linux (Fedora / Ubuntu / Nobara), Windows 10/11 o macOS.
+* **Sistema Operativo:** Linux (Mint / Nobara), Windows 10/11 o macOS.
 * **Entorno de Ejecución:** Node.js (v18.x o superior) y npm.
 * **Gestor de Base de Datos:** MongoDB Community Server (local) o MongoDB Atlas (nube).
 * **SDK:** Flutter SDK (v3.x o superior).

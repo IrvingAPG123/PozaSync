@@ -4,7 +4,12 @@ from pymongo.errors import PyMongoError
 
 from src.database import db
 from src.routes.auth import router as auth_router
+from src.routes.tecnicos import router as tecnicos_router
 
+
+# ==========================================
+# CONFIGURACION PRINCIPAL DE POZASYNC
+# ==========================================
 
 app = FastAPI(
     title="PozaSync API",
@@ -12,9 +17,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Registrar las rutas de autenticacion
+
+# ==========================================
+# REGISTRAR RUTAS
+# ==========================================
+
+# Registro, inicio de sesion y usuario actual
 app.include_router(auth_router)
 
+# Perfiles profesionales de tecnicos
+app.include_router(tecnicos_router)
+
+
+# ==========================================
+# RUTA PRINCIPAL
+# ==========================================
 
 @app.get("/")
 def inicio():
@@ -24,15 +41,25 @@ def inicio():
     }
 
 
+# ==========================================
+# CONSULTAR USUARIOS
+# ==========================================
+
 @app.get("/usuarios")
 def obtener_usuarios():
     try:
         usuarios = list(
             db["usuarios"].find(
                 {},
-                {"_id": 0, "nombre": 1, "rol": 1, "ciudad": 1}
+                {
+                    "_id": 0,
+                    "nombre": 1,
+                    "rol": 1,
+                    "ciudad": 1
+                }
             )
         )
+
         return {
             "total": len(usuarios),
             "usuarios": usuarios
@@ -44,6 +71,10 @@ def obtener_usuarios():
             detail="No se pudieron consultar los usuarios"
         )
 
+
+# ==========================================
+# CONSULTAR TECNICOS
+# ==========================================
 
 @app.get("/tecnicos")
 def obtener_tecnicos():
@@ -60,6 +91,7 @@ def obtener_tecnicos():
                 }
             )
         )
+
         return {
             "total": len(tecnicos),
             "tecnicos": tecnicos

@@ -1,54 +1,61 @@
 
-from datetime import datetime
+from fastapi import FastAPI, HTTPException
+from pymongo.errors import PyMongoError
 
-class PozaSync:
-    def __init__(self):
-        self.nombre = "PozaSync"
-        self.integrantes = [
-            "Edwin",
-            "Yuneli",
-            "Alexa"
-        ]
+from src.database import db
 
-    def mostrar_bienvenida(self):
-        print("=" * 40)
-        print(f"Bienvenido a {self.nombre}")
-        print("=" * 40)
-        print("Plataforma de colaboración y desarrollo")
-        print(f"Fecha: {datetime.now().strftime('%d/%m/%Y')}")
-        print("\nIntegrantes del proyecto:")
-
-        for integrante in self.integrantes:
-            print(f"- {integrante}")
-
-    def iniciar(self):
-        self.mostrar_bienvenida()
-
-        while True:
-            print("\n¿Qué deseas hacer?")
-            print("1. Mostrar integrantes")
-            print("2. Mostrar información del proyecto")
-            print("3. Salir")
-
-            opcion = input("\nSelecciona una opción: ")
-
-            if opcion == "1":
-                print("\nIntegrantes:")
-                for persona in self.integrantes:
-                    print(f"- {persona}")
-
-            elif opcion == "2":
-                print("\nProyecto: PozaSync")
-                print("Estado: En desarrollo")
-
-            elif opcion == "3":
-                print("Cerrando PozaSync...")
-                break
-
-            else:
-                print("Opción no válida.")
+app = FastAPI(
+    title="PozaSync API",
+    description="API para conectar clientes y tecnicos",
+    version="1.0.0"
+)
 
 
-if __name__ == "__main__":
-    aplicacion = PozaSync()
-    aplicacion.iniciar()
+@app.get("/")
+def inicio():
+    return {
+        "mensaje": "Bienvenido a PozaSync",
+        "estado": "API funcionando"
+    }
+
+
+@app.get("/usuarios")
+def obtener_usuarios():
+    try:
+        usuarios = list(
+            db["usuarios"].find(
+                {},
+                {"_id": 0, "nombre": 1, "rol": 1, "ciudad": 1}
+            )
+        )
+        return {"total": len(usuarios), "usuarios": usuarios}
+
+    except PyMongoError:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudieron consultar los usuarios"
+        )
+
+
+@app.get("/tecnicos")
+def obtener_tecnicos():
+    try:
+        tecnicos = list(
+            db["perfiles_tecnicos"].find(
+                {},
+                {
+                    "_id": 0,
+                    "nombre": 1,
+                    "especialidad": 1,
+                    "ciudad": 1,
+                    "disponible": 1
+                }
+            )
+        )
+        return {"total": len(tecnicos), "tecnicos": tecnicos}
+
+    except PyMongoError:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudieron consultar los tecnicos"
+        )

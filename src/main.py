@@ -3,12 +3,17 @@ from fastapi import FastAPI, HTTPException
 from pymongo.errors import PyMongoError
 
 from src.database import db
+from src.routes.auth import router as auth_router
+
 
 app = FastAPI(
     title="PozaSync API",
     description="API para conectar clientes y tecnicos",
     version="1.0.0"
 )
+
+# Registrar las rutas de autenticacion
+app.include_router(auth_router)
 
 
 @app.get("/")
@@ -28,7 +33,10 @@ def obtener_usuarios():
                 {"_id": 0, "nombre": 1, "rol": 1, "ciudad": 1}
             )
         )
-        return {"total": len(usuarios), "usuarios": usuarios}
+        return {
+            "total": len(usuarios),
+            "usuarios": usuarios
+        }
 
     except PyMongoError:
         raise HTTPException(
@@ -52,7 +60,10 @@ def obtener_tecnicos():
                 }
             )
         )
-        return {"total": len(tecnicos), "tecnicos": tecnicos}
+        return {
+            "total": len(tecnicos),
+            "tecnicos": tecnicos
+        }
 
     except PyMongoError:
         raise HTTPException(

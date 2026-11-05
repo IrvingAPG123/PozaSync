@@ -1,5 +1,6 @@
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pymongo.errors import PyMongoError
 
 from src.database import db
@@ -15,6 +16,39 @@ app = FastAPI(
     title="PozaSync API",
     description="API para conectar clientes y tecnicos",
     version="1.0.0"
+)
+
+
+# ==========================================
+# CONFIGURACION DE CORS
+# ==========================================
+
+# Permite que el frontend de Expo se comunique
+# con FastAPI desde el navegador.
+#
+# Estos origenes son exclusivamente para
+# desarrollo local.
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://localhost:8082",
+        "http://127.0.0.1:8082",
+    ],
+    allow_credentials=False,
+    allow_methods=[
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS",
+    ],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+    ],
 )
 
 

@@ -1,54 +1,138 @@
 
-from datetime import datetime
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pymongo.errors import PyMongoError
 
-class PozaSync:
-    def __init__(self):
-        self.nombre = "PozaSync"
-        self.integrantes = [
-            "Edwin",
-            "Yuneli",
-            "Alexa"
-        ]
-
-    def mostrar_bienvenida(self):
-        print("=" * 40)
-        print(f"Bienvenido a {self.nombre}")
-        print("=" * 40)
-        print("Plataforma de colaboración y desarrollo")
-        print(f"Fecha: {datetime.now().strftime('%d/%m/%Y')}")
-        print("\nIntegrantes del proyecto:")
-
-        for integrante in self.integrantes:
-            print(f"- {integrante}")
-
-    def iniciar(self):
-        self.mostrar_bienvenida()
-
-        while True:
-            print("\n¿Qué deseas hacer?")
-            print("1. Mostrar integrantes")
-            print("2. Mostrar información del proyecto")
-            print("3. Salir")
-
-            opcion = input("\nSelecciona una opción: ")
-
-            if opcion == "1":
-                print("\nIntegrantes:")
-                for persona in self.integrantes:
-                    print(f"- {persona}")
-
-            elif opcion == "2":
-                print("\nProyecto: PozaSync")
-                print("Estado: En desarrollo")
-
-            elif opcion == "3":
-                print("Cerrando PozaSync...")
-                break
-
-            else:
-                print("Opción no válida.")
+from src.database import db
+from src.routes.auth import router as auth_router
+from src.routes.tecnicos import router as tecnicos_router
 
 
-if __name__ == "__main__":
-    aplicacion = PozaSync()
-    aplicacion.iniciar()
+# ==========================================
+# CONFIGURACION PRINCIPAL DE POZASYNC
+# ==========================================
+
+app = FastAPI(
+    title="PozaSync API",
+    description="API para conectar clientes y tecnicos",
+    version="1.0.0"
+)
+
+
+# ==========================================
+# CONFIGURACION DE CORS
+# ==========================================
+
+# Permite que el frontend de Expo se comunique
+# con FastAPI desde el navegador.
+#
+# Estos origenes son exclusivamente para
+# desarrollo local.
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://localhost:8082",
+        "http://127.0.0.1:8082",
+    ],
+    allow_credentials=False,
+    allow_methods=[
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS",
+    ],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+    ],
+)
+
+
+# ==========================================
+# REGISTRAR RUTAS
+# ==========================================
+
+# Registro, inicio de sesion y usuario actual
+app.include_router(auth_router)
+
+# Perfiles profesionales de tecnicos
+app.include_router(tecnicos_router)
+
+
+# ==========================================
+# RUTA PRINCIPAL
+# ==========================================
+
+@app.get("/")
+def inicio():
+    return {
+        "mensaje": "Bienvenido a PozaSync",
+        "estado": "API funcionando"
+    }
+
+
+# ==========================================
+# CONSULTAR USUARIOS
+# ==========================================
+
+@app.get("/usuarios")
+def obtener_usuarios():
+    try:
+        usuarios = list(
+            db["usuarios"].find(
+                {},
+                {
+                    "_id": 0,
+                    "nombre": 1,
+                    "rol": 1,
+                    "ciudad": 1
+                }
+            )
+        )
+
+        return {
+            "total": len(usuarios),
+            "usuarios": usuarios
+        }
+
+    except PyMongoError:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudieron consultar los usuarios"
+        )
+
+
+# ==========================================
+# CONSULTAR TECNICOS
+# ==========================================
+
+@app.get("/tecnicos")
+def obtener_tecnicos():
+    try:
+        tecnicos = list(
+            db["perfiles_tecnicos"].find(
+                {},
+                {
+                    "_id": 0,
+                    "nombre": 1,
+                    "especialidad": 1,
+                    "ciudad": 1,
+                    "disponible": 1
+                }
+            )
+        )
+
+        return {
+            "total": len(tecnicos),
+            "tecnicos": tecnicos
+        }
+
+    except PyMongoError:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudieron consultar los tecnicos"
+        )

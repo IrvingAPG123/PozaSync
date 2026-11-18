@@ -22,11 +22,13 @@ const API_URL =
     : process.env.EXPO_PUBLIC_API_URL ||
       'http://127.0.0.1:8001';
 
+const CLAVE_TOKEN = 'pozasync_token';
+
 type Usuario = {
   id: string;
   nombre: string;
   correo: string;
-  rol: 'cliente' | 'tecnico';
+  rol: 'cliente' | 'tecnico' | 'admin';
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -49,22 +51,31 @@ function obtenerDetalle(detail: unknown): string {
   return '';
 }
 
+function guardarTokenWeb(token: string): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.setItem(CLAVE_TOKEN, token);
+}
+
+function limpiarTokenWeb(): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.removeItem(CLAVE_TOKEN);
+}
+
 export default function InicioSesion() {
   const [correo, setCorreo] = useState('');
   const [contrasena, setContrasena] = useState('');
-
   const [mostrarContrasena, setMostrarContrasena] =
     useState(false);
-
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
-
   const [necesitaVerificacion, setNecesitaVerificacion] =
     useState(false);
-
-  const [usuario, setUsuario] = useState<Usuario | null>(
-    null
-  );
 
   function limpiarError() {
     setError('');
@@ -86,7 +97,6 @@ export default function InicioSesion() {
     }
 
     const email = correo.trim().toLowerCase();
-
     limpiarError();
 
     if (!email || !contrasena) {
@@ -113,6 +123,10 @@ export default function InicioSesion() {
     setCargando(true);
 
     try {
+      // ======================================
+      // 1. VALIDAR CREDENCIALES EN FASTAPI
+      // ======================================
+
       const respuesta = await fetch(
         `${API_URL}/auth/login`,
         {
@@ -151,9 +165,6 @@ export default function InicioSesion() {
             detalle ||
             'No se pudo iniciar sesión con esta cuenta.';
 
-          // Mostrar la opción del PIN únicamente
-          // cuando el backend indique que falta
-          // verificar el correo electrónico.
           if (/verific|confirm/i.test(mensaje)) {
             setNecesitaVerificacion(true);
           }
@@ -173,6 +184,10 @@ export default function InicioSesion() {
         );
       }
 
+      // ======================================
+      // 2. COMPROBAR TOKEN JWT
+      // ======================================
+
       if (
         !datos ||
         typeof datos.access_token !== 'string' ||
@@ -183,11 +198,17 @@ export default function InicioSesion() {
         );
       }
 
+      const token = datos.access_token;
+
+      // ======================================
+      // 3. CONSULTAR PERFIL AUTENTICADO
+      // ======================================
+
       const respuestaUsuario = await fetch(
         `${API_URL}/auth/yo`,
         {
           headers: {
-            Authorization: `Bearer ${datos.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -211,9 +232,69 @@ export default function InicioSesion() {
         );
       }
 
-      setUsuario(perfil);
-      setContrasena('');
-      limpiarError();
+      // ======================================
+      // 4. REDIRIGIR SEGÚN EL ROL
+      // ======================================
+
+      // CLIENTE
+      if (perfil.rol === 'cliente') {
+        if (Platform.OS === 'web') {
+          try {
+            guardarTokenWeb(token);
+          } catch {
+            throw new Error(
+              'No se pudo guardar la sesión en el navegador.'
+            );
+          }
+        } else {
+          throw new Error(
+            'El inicio de sesión en móvil requiere configurar almacenamiento seguro. Por ahora utiliza la versión web.'
+          );
+        }
+
+        setContrasena('');
+        router.replace('/panel-cliente');
+        return;
+      }
+
+      // ======================================
+      // TÉCNICO - NUEVA REDIRECCIÓN
+      // ======================================
+
+      if (perfil.rol === 'tecnico') {
+        if (Platform.OS === 'web') {
+          try {
+            guardarTokenWeb(token);
+          } catch {
+            throw new Error(
+              'No se pudo guardar la sesión en el navegador.'
+            );
+          }
+        } else {
+          throw new Error(
+            'El inicio de sesión en móvil requiere configurar almacenamiento seguro. Por ahora utiliza la versión web.'
+          );
+        }
+
+        setContrasena('');
+        router.replace('/panel-tecnico');
+        return;
+      }
+
+      // ADMINISTRADOR
+      if (perfil.rol === 'admin') {
+        limpiarTokenWeb();
+        setContrasena('');
+
+        setError(
+          'Inicio de sesión correcto. El panel de administración todavía está en desarrollo.'
+        );
+        return;
+      }
+
+      throw new Error(
+        'El tipo de cuenta no es válido.'
+      );
     } catch (e) {
       setError(
         e instanceof TypeError
@@ -226,102 +307,6 @@ export default function InicioSesion() {
       setCargando(false);
     }
   }
-
-  function cerrarSesion() {
-    setUsuario(null);
-    setCorreo('');
-    setContrasena('');
-    setMostrarContrasena(false);
-    limpiarError();
-  }
-
-  // ========================================
-  // PANTALLA DESPUÉS DE INICIAR SESIÓN
-  // ========================================
-
-  if (usuario) {
-    return (
-      <ScrollView
-        style={styles.pantalla}
-        contentContainerStyle={styles.contenedor}
-      >
-        <StatusBar style="dark" />
-
-        <View style={styles.tarjeta}>
-          <View style={styles.marca}>
-            <View style={styles.iconoMarca}>
-              <Ionicons
-                name="construct-outline"
-                size={23}
-                color="#FFFFFF"
-              />
-            </View>
-
-            <Text style={styles.nombreMarca}>
-              PozaSync
-            </Text>
-          </View>
-
-          <View style={styles.iconoExito}>
-            <Ionicons
-              name="checkmark"
-              size={30}
-              color="#047857"
-            />
-          </View>
-
-          <Text style={styles.titulo}>
-            Hola, {usuario.nombre}
-          </Text>
-
-          <Text style={styles.descripcion}>
-            Has iniciado sesión correctamente.
-          </Text>
-
-          <View style={styles.panelPerfil}>
-            <Text style={styles.datoEtiqueta}>
-              CORREO ELECTRÓNICO
-            </Text>
-
-            <Text style={styles.datoValor}>
-              {usuario.correo}
-            </Text>
-
-            <View style={styles.separador} />
-
-            <Text style={styles.datoEtiqueta}>
-              TIPO DE CUENTA
-            </Text>
-
-            <Text style={styles.datoValor}>
-              {usuario.rol === 'tecnico'
-                ? 'Profesional técnico'
-                : 'Cliente'}
-            </Text>
-          </View>
-
-          <Text style={styles.nota}>
-            Próximamente tendrás acceso a tu panel
-            de servicios personalizado.
-          </Text>
-
-          <Pressable
-            style={styles.botonSecundario}
-            onPress={cerrarSesion}
-            accessibilityRole="button"
-          >
-            <Text style={styles.textoBotonSecundario}>
-              Cerrar sesión
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    );
-  }
-
-  // ========================================
-  // PANTALLA DE INICIO DE SESIÓN
-  // ========================================
 
   return (
     <KeyboardAvoidingView
@@ -339,6 +324,9 @@ export default function InicioSesion() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.tarjeta}>
+
+          {/* MARCA POZASYNC */}
+
           <View style={styles.marca}>
             <View style={styles.iconoMarca}>
               <Ionicons
@@ -353,6 +341,8 @@ export default function InicioSesion() {
             </Text>
           </View>
 
+          {/* BIENVENIDA */}
+
           <Text style={styles.titulo}>
             Bienvenido de nuevo
           </Text>
@@ -362,7 +352,10 @@ export default function InicioSesion() {
             profesionales o administrar tus servicios.
           </Text>
 
+          {/* FORMULARIO */}
+
           <View style={styles.formulario}>
+
             <Text style={styles.etiqueta}>
               Correo electrónico
             </Text>
@@ -448,7 +441,8 @@ export default function InicioSesion() {
               </Pressable>
             </View>
 
-            {/* Mensaje de error del servidor */}
+            {/* MENSAJES DE ERROR */}
+
             {error ? (
               <View style={styles.error}>
                 <Ionicons
@@ -463,11 +457,8 @@ export default function InicioSesion() {
               </View>
             ) : null}
 
-            {/*
-              Este botón SOLO aparece cuando
-              el servidor confirma que la cuenta
-              necesita verificar su correo.
-            */}
+            {/* VERIFICACIÓN DE CORREO */}
+
             {necesitaVerificacion ? (
               <Pressable
                 style={styles.botonVerificar}
@@ -486,6 +477,8 @@ export default function InicioSesion() {
                 </Text>
               </Pressable>
             ) : null}
+
+            {/* BOTÓN INICIAR SESIÓN */}
 
             <Pressable
               style={[
@@ -516,6 +509,8 @@ export default function InicioSesion() {
             </Pressable>
           </View>
 
+          {/* REGISTRO */}
+
           <View style={styles.registro}>
             <Text style={styles.textoSecundario}>
               ¿Aún no tienes una cuenta?
@@ -533,15 +528,7 @@ export default function InicioSesion() {
             </Pressable>
           </View>
 
-          {/*
-            CORRECCIÓN:
-            Se eliminó la leyenda permanente
-            "¿Ya te registraste pero falta verificar?
-            Introducir mi PIN".
-
-            La verificación ahora se ofrece
-            solamente cuando corresponde.
-          */}
+          {/* PIE */}
 
           <View style={styles.pie}>
             <Ionicons
@@ -555,15 +542,12 @@ export default function InicioSesion() {
               con profesionales en Poza Rica.
             </Text>
           </View>
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
-// ==========================================
-// ESTILOS DE POZASYNC
-// ==========================================
 
 const styles = StyleSheet.create({
   pantalla: {
@@ -755,64 +739,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: '#66758A',
     textAlign: 'center',
-  },
-
-  iconoExito: {
-    width: 56,
-    height: 56,
-    backgroundColor: '#ECFDF3',
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 22,
-  },
-
-  panelPerfil: {
-    backgroundColor: '#F7F9FC',
-    borderRadius: 10,
-    padding: 18,
-    marginTop: 25,
-  },
-
-  datoEtiqueta: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#66758A',
-    marginBottom: 7,
-  },
-
-  datoValor: {
-    fontSize: 15,
-    color: '#152238',
-    fontWeight: '600',
-  },
-
-  separador: {
-    height: 1,
-    backgroundColor: '#E4E9F0',
-    marginVertical: 16,
-  },
-
-  nota: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#66758A',
-    textAlign: 'center',
-    marginVertical: 25,
-  },
-
-  botonSecundario: {
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#D5DCE5',
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  textoBotonSecundario: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#344054',
   },
 });

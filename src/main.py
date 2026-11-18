@@ -1,11 +1,15 @@
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo.errors import PyMongoError
 
 from src.database import db
+
 from src.routes.auth import router as auth_router
 from src.routes.tecnicos import router as tecnicos_router
+from src.routes.solicitudes import router as solicitudes_router
+from src.routes.conversaciones import router as conversaciones_router
+from src.routes.servicios import router as servicios_router
+from src.routes.resenas import router as resenas_router
 
 
 # ==========================================
@@ -14,20 +18,18 @@ from src.routes.tecnicos import router as tecnicos_router
 
 app = FastAPI(
     title="PozaSync API",
-    description="API para conectar clientes y tecnicos",
-    version="1.0.0"
+    description=(
+        "API para conectar clientes y tecnicos, "
+        "publicar solicitudes, gestionar conversaciones, "
+        "registrar servicios y publicar calificaciones."
+    ),
+    version="1.3.0",
 )
 
 
 # ==========================================
 # CONFIGURACION DE CORS
 # ==========================================
-
-# Permite que el frontend de Expo se comunique
-# con FastAPI desde el navegador.
-#
-# Estos origenes son exclusivamente para
-# desarrollo local.
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,6 +44,7 @@ app.add_middleware(
         "GET",
         "POST",
         "PUT",
+        "PATCH",
         "DELETE",
         "OPTIONS",
     ],
@@ -56,11 +59,12 @@ app.add_middleware(
 # REGISTRAR RUTAS
 # ==========================================
 
-# Registro, inicio de sesion y usuario actual
 app.include_router(auth_router)
-
-# Perfiles profesionales de tecnicos
 app.include_router(tecnicos_router)
+app.include_router(solicitudes_router)
+app.include_router(conversaciones_router)
+app.include_router(servicios_router)
+app.include_router(resenas_router)
 
 
 # ==========================================
@@ -71,7 +75,7 @@ app.include_router(tecnicos_router)
 def inicio():
     return {
         "mensaje": "Bienvenido a PozaSync",
-        "estado": "API funcionando"
+        "estado": "API funcionando",
     }
 
 
@@ -89,20 +93,20 @@ def obtener_usuarios():
                     "_id": 0,
                     "nombre": 1,
                     "rol": 1,
-                    "ciudad": 1
-                }
+                    "ciudad": 1,
+                },
             )
         )
 
         return {
             "total": len(usuarios),
-            "usuarios": usuarios
+            "usuarios": usuarios,
         }
 
     except PyMongoError:
         raise HTTPException(
             status_code=503,
-            detail="No se pudieron consultar los usuarios"
+            detail="No se pudieron consultar los usuarios",
         )
 
 
@@ -118,21 +122,24 @@ def obtener_tecnicos():
                 {},
                 {
                     "_id": 0,
-                    "nombre": 1,
+                    "usuario_id": 0,
+                    "especialidades": 1,
                     "especialidad": 1,
-                    "ciudad": 1,
-                    "disponible": 1
-                }
+                    "disponible": 1,
+                    "descripcion": 1,
+                    "experiencia_anios": 1,
+                    "colonias_cobertura": 1,
+                },
             )
         )
 
         return {
             "total": len(tecnicos),
-            "tecnicos": tecnicos
+            "tecnicos": tecnicos,
         }
 
     except PyMongoError:
         raise HTTPException(
             status_code=503,
-            detail="No se pudieron consultar los tecnicos"
+            detail="No se pudieron consultar los tecnicos",
         )

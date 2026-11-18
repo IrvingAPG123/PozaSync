@@ -28,11 +28,18 @@ export default function RootLayout() {
           animation: 'fade',
         }}
       >
+        {/* Autenticación */}
         <Stack.Screen name="index" />
 
         <Stack.Screen name="registro" />
 
         <Stack.Screen name="verificar-correo" />
+
+        {/* Panel del cliente */}
+        <Stack.Screen name="panel-cliente" />
+
+        {/* Panel del técnico */}
+        <Stack.Screen name="panel-tecnico" />
       </Stack>
     </ThemeProvider>
   );

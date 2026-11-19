@@ -1,14 +1,19 @@
 
 import os
 import re
-import smtplib
-import ssl
+import json
+import base64
 
 from pathlib import Path
 from email.message import EmailMessage
 from html import escape
 
 from dotenv import load_dotenv
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 
 # ==========================================
@@ -20,72 +25,82 @@ ENV_PATH = BASE_DIR / ".env"
 
 load_dotenv(dotenv_path=ENV_PATH)
 
+GMAIL_SCOPE = (
+    "https://www.googleapis.com/auth/gmail.send"
+)
+
 
 # ==========================================
-# VALIDAR CONFIGURACION SMTP
+# CONFIGURACION DE GMAIL API
 # ==========================================
 
-def obtener_configuracion_smtp():
-    smtp_host = os.getenv(
-        "SMTP_HOST", ""
+def obtener_configuracion_gmail():
+
+    remitente = os.getenv(
+        "GMAIL_FROM", ""
     ).strip()
 
-    puerto_texto = os.getenv(
-        "SMTP_PORT", "465"
+    token_base64 = os.getenv(
+        "GMAIL_TOKEN_BASE64", ""
     ).strip()
 
-    smtp_user = os.getenv(
-        "SMTP_USER", ""
-    ).strip()
-
-    smtp_password = os.getenv(
-        "SMTP_PASSWORD", ""
-    ).replace(" ", "").strip()
-
-    smtp_from = os.getenv(
-        "SMTP_FROM", smtp_user
-    ).strip()
-
-    faltantes = []
-
-    if not smtp_host:
-        faltantes.append("SMTP_HOST")
-
-    if not smtp_user:
-        faltantes.append("SMTP_USER")
-
-    if not smtp_password:
-        faltantes.append("SMTP_PASSWORD")
-
-    if not smtp_from:
-        faltantes.append("SMTP_FROM")
-
-    if faltantes:
+    if not remitente:
         raise RuntimeError(
-            "Faltan variables SMTP en .env: "
-            + ", ".join(faltantes)
+            "Falta la variable GMAIL_FROM."
         )
+
+    if not token_base64:
+        raise RuntimeError(
+            "Falta la variable GMAIL_TOKEN_BASE64."
+        )
+
+    return remitente, token_base64
+
+
+# ==========================================
+# AUTENTICACION CON GOOGLE
+# ==========================================
+
+def obtener_credenciales_gmail():
+
+    _, token_base64 = obtener_configuracion_gmail()
 
     try:
-        smtp_port = int(puerto_texto)
-    except ValueError as error:
-        raise RuntimeError(
-            "SMTP_PORT debe ser un número válido."
-        ) from error
+        contenido = base64.b64decode(
+            token_base64,
+            validate=True,
+        ).decode("utf-8")
 
-    if smtp_port not in (465, 587):
-        raise RuntimeError(
-            "Puerto SMTP no compatible. "
-            "Utiliza 465 o 587."
+        datos = json.loads(contenido)
+
+        credenciales = (
+            Credentials.from_authorized_user_info(
+                datos,
+                scopes=[GMAIL_SCOPE],
+            )
         )
 
-    return (
-        smtp_host,
-        smtp_port,
-        smtp_user,
-        smtp_password,
-        smtp_from,
-    )
+        if not credenciales.refresh_token:
+            raise RuntimeError(
+                "La autorización de Gmail "
+                "no contiene refresh_token."
+            )
+
+        # Renovar el token de acceso mediante HTTPS.
+        # El refresh_token se conserva en Render.
+        credenciales.refresh(Request())
+
+        return credenciales
+
+    except RuntimeError:
+        raise
+
+    except Exception as error:
+        raise RuntimeError(
+            "No fue posible autenticar Gmail API. "
+            "Revisa la autorización OAuth y "
+            "las variables de Render."
+        ) from error
 
 
 # ==========================================
@@ -267,7 +282,7 @@ def crear_mensaje_verificacion(
 
 
 # ==========================================
-# ENVIAR CODIGO POR GMAIL SMTP
+# ENVIAR CODIGO MEDIANTE GMAIL API
 # ==========================================
 
 def enviar_codigo_verificacion(
@@ -275,95 +290,55 @@ def enviar_codigo_verificacion(
     codigo: str,
 ) -> None:
 
-    (
-        smtp_host,
-        smtp_port,
-        smtp_user,
-        smtp_password,
-        smtp_from,
-    ) = obtener_configuracion_smtp()
+    remitente, _ = obtener_configuracion_gmail()
 
     mensaje = crear_mensaje_verificacion(
         destinatario=destinatario,
         codigo=codigo,
-        remitente=smtp_from,
+        remitente=remitente,
     )
 
-    contexto = ssl.create_default_context()
+    credenciales = obtener_credenciales_gmail()
+
+    mensaje_codificado = (
+        base64.urlsafe_b64encode(
+            mensaje.as_bytes()
+        ).decode("utf-8")
+    )
 
     try:
+        servicio = build(
+            "gmail",
+            "v1",
+            credentials=credenciales,
+            cache_discovery=False,
+        )
 
-        # ==================================
-        # CONEXION SEGURA SSL - PUERTO 465
-        # ==================================
+        resultado = (
+            servicio.users()
+            .messages()
+            .send(
+                userId="me",
+                body={
+                    "raw": mensaje_codificado,
+                },
+            )
+            .execute()
+        )
 
-        if smtp_port == 465:
+        if not resultado.get("id"):
+            raise RuntimeError(
+                "Gmail API no confirmó el envío."
+            )
 
-            with smtplib.SMTP_SSL(
-                host=smtp_host,
-                port=smtp_port,
-                context=contexto,
-                timeout=20,
-            ) as servidor:
-
-                servidor.login(
-                    smtp_user,
-                    smtp_password,
-                )
-
-                servidor.send_message(mensaje)
-
-        # ==================================
-        # CONEXION STARTTLS - PUERTO 587
-        # ==================================
-
-        elif smtp_port == 587:
-
-            with smtplib.SMTP(
-                host=smtp_host,
-                port=smtp_port,
-                timeout=20,
-            ) as servidor:
-
-                servidor.ehlo()
-
-                servidor.starttls(
-                    context=contexto
-                )
-
-                servidor.ehlo()
-
-                servidor.login(
-                    smtp_user,
-                    smtp_password,
-                )
-
-                servidor.send_message(mensaje)
-
-    except smtplib.SMTPAuthenticationError as error:
-
+    except HttpError as error:
         raise RuntimeError(
-            "Gmail rechazó el acceso. "
-            "Revisa la contraseña de aplicación."
-        ) from error
-
-    except smtplib.SMTPRecipientsRefused as error:
-
-        raise RuntimeError(
-            "Gmail rechazó la dirección "
-            "del destinatario."
-        ) from error
-
-    except smtplib.SMTPException as error:
-
-        raise RuntimeError(
-            "No fue posible enviar el correo "
-            "mediante Gmail SMTP."
+            "Gmail API rechazó el envío "
+            "del correo de verificación."
         ) from error
 
     except (OSError, TimeoutError) as error:
-
         raise RuntimeError(
-            "No fue posible conectar con "
-            "el servidor de correo."
+            "No fue posible conectar "
+            "con Gmail API."
         ) from error

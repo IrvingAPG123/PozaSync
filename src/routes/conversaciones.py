@@ -463,6 +463,7 @@ def iniciar_conversacion(
         solicitud = solicitudes.find_one({
             "_id": solicitud_id,
             "estado": "publicada",
+            "bloqueada_administrativamente": {"$ne": True},
         })
 
         perfil = perfiles_tecnicos.find_one({

@@ -158,6 +158,7 @@ def registrar_usuario(datos: UsuarioRegistro):
         "ciudad": datos.ciudad,
         "foto_perfil": datos.foto_perfil,
         "activo": True,
+        "version_token": 0,
         "correo_verificado": False,
         "fecha_registro": ahora_utc(),
     }
@@ -377,7 +378,12 @@ def reenviar_codigo(datos: ReenviarCodigo):
 def iniciar_sesion(datos: UsuarioLogin):
     correo = str(datos.correo).strip().lower()
 
-    usuario = usuarios.find_one({"correo": correo})
+    usuario = usuarios.find_one({
+        "correo": correo,
+        "rol": {
+            "$in": ["cliente", "tecnico"]
+        },
+    })
 
     if not usuario:
         raise HTTPException(
@@ -416,7 +422,10 @@ def iniciar_sesion(datos: UsuarioLogin):
             ),
         )
 
-    token = crear_token(str(usuario["_id"]))
+    token = crear_token(
+        str(usuario["_id"]),
+        version_token=usuario.get("version_token", 0),
+    )
 
     return {
         "access_token": token,
@@ -452,7 +461,10 @@ def obtener_mi_perfil(
         )
 
     usuario = usuarios.find_one({
-        "_id": ObjectId(usuario_id)
+        "_id": ObjectId(usuario_id),
+        "rol": {
+            "$in": ["cliente", "tecnico"]
+        },
     })
 
     if not usuario or not usuario.get("activo", False):

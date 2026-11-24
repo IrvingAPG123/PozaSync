@@ -1,3 +1,4 @@
+import { obtenerToken } from '../services/tokenStorage';
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -56,14 +57,6 @@ const COLORES = {
   rojo: '#C62828',
 };
 
-function obtenerToken(): string | null {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return null;
-  }
-
-  return window.sessionStorage.getItem('pozasync_token');
-}
-
 function mostrarAviso(titulo: string, mensaje: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     window.alert(`${titulo}\n\n${mensaje}`);
@@ -112,7 +105,7 @@ export default function PerfilTecnico() {
   const [error, setError] = useState('');
 
   const cargarPerfil = useCallback(async () => {
-    const token = obtenerToken();
+    const token = await obtenerToken();
 
     if (!token) {
       router.replace('/');
@@ -193,7 +186,7 @@ export default function PerfilTecnico() {
   }
 
   async function guardarPerfil() {
-    const token = obtenerToken();
+    const token = await obtenerToken();
 
     if (!token) {
       router.replace('/');

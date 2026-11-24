@@ -1,3 +1,4 @@
+import { obtenerToken, borrarToken } from '../services/tokenStorage';
 
 import React, { useCallback, useState } from 'react';
 import {
@@ -7,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   Text,
   View,
 } from 'react-native';
@@ -19,7 +21,6 @@ const API_URL =
     : process.env.EXPO_PUBLIC_API_URL ||
       'http://127.0.0.1:8001';
 
-const CLAVE_TOKEN = 'pozasync_token';
 
 type Usuario = {
   id: string;
@@ -101,17 +102,6 @@ const C = {
   rojo: '#C62828',
 };
 
-function obtenerToken(): string | null {
-  if (
-    Platform.OS !== 'web' ||
-    typeof window === 'undefined'
-  ) {
-    return null;
-  }
-
-  return window.sessionStorage.getItem(CLAVE_TOKEN);
-}
-
 function obtenerMensajeError(datos: unknown): string {
   if (
     datos &&
@@ -169,6 +159,9 @@ function obtenerCategoriaSolicitud(
 }
 
 export default function PanelTecnico() {
+  const { width } = useWindowDimensions();
+  const pantallaPequena = width < 650;
+
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
   const [especialidades, setEspecialidades] = useState<string[]>([]);
@@ -200,7 +193,7 @@ export default function PanelTecnico() {
   // ========================================
 
   const cargarNotificaciones = useCallback(async () => {
-    const token = obtenerToken();
+    const token = await obtenerToken();
 
     if (!token) {
       return;
@@ -244,7 +237,7 @@ export default function PanelTecnico() {
 
   const cargarDatos = useCallback(
     async (recarga = false) => {
-      const token = obtenerToken();
+      const token = await obtenerToken();
 
       if (!token) {
         router.replace('/');
@@ -273,14 +266,7 @@ export default function PanelTecnico() {
           respuestaUsuario.status === 401 ||
           respuestaUsuario.status === 403
         ) {
-          if (
-            Platform.OS === 'web' &&
-            typeof window !== 'undefined'
-          ) {
-            window.sessionStorage.removeItem(
-              CLAVE_TOKEN
-            );
-          }
+          await borrarToken();
 
           router.replace('/');
           return;
@@ -397,13 +383,8 @@ export default function PanelTecnico() {
   // CERRAR SESION
   // ========================================
 
-  function cerrarSesion() {
-    if (
-      Platform.OS === 'web' &&
-      typeof window !== 'undefined'
-    ) {
-      window.sessionStorage.removeItem(CLAVE_TOKEN);
-    }
+  async function cerrarSesion() {
+    await borrarToken();
 
     setUsuario(null);
     setSolicitudes([]);
@@ -423,7 +404,7 @@ export default function PanelTecnico() {
 
     setErrorContacto(null);
 
-    const token = obtenerToken();
+    const token = await obtenerToken();
 
     if (!token) {
       router.replace('/');
@@ -550,12 +531,22 @@ export default function PanelTecnico() {
   return (
     <ScrollView
       style={styles.pantalla}
-      contentContainerStyle={styles.contenido}
+      contentContainerStyle={[
+        styles.contenido,
+        pantallaPequena && styles.contenidoMovil,
+      ]}
     >
       {/* ENCABEZADO */}
 
-      <View style={styles.encabezado}>
-        <View style={{ flex: 1 }}>
+      <View style={[
+        styles.encabezado,
+        pantallaPequena && styles.encabezadoMovil,
+      ]}>
+        <View style={
+          pantallaPequena
+            ? styles.marcaContenedorMovil
+            : styles.marcaContenedor
+        }>
           <Text style={styles.marca}>
             PozaSync
           </Text>
@@ -564,11 +555,17 @@ export default function PanelTecnico() {
           </Text>
         </View>
 
-        <View style={styles.fila}>
+        <View style={[
+          styles.fila,
+          pantallaPequena && styles.navegacionMovil,
+        ]}>
           {/* MENSAJES CON CONTADOR NUMERICO */}
 
           <Pressable
-            style={styles.botonTexto}
+            style={[
+              styles.botonTexto,
+              pantallaPequena && styles.botonNavegacionMovil,
+            ]}
             onPress={() =>
               router.push('/conversaciones')
             }
@@ -605,7 +602,10 @@ export default function PanelTecnico() {
           {/* MI PERFIL */}
 
           <Pressable
-            style={styles.botonTexto}
+            style={[
+              styles.botonTexto,
+              pantallaPequena && styles.botonNavegacionMovil,
+            ]}
             onPress={() =>
               router.push('/perfil-tecnico')
             }
@@ -623,7 +623,10 @@ export default function PanelTecnico() {
           {/* SALIR */}
 
           <Pressable
-            style={styles.botonTexto}
+            style={[
+              styles.botonTexto,
+              pantallaPequena && styles.botonNavegacionMovil,
+            ]}
             onPress={cerrarSesion}
           >
             <Ionicons
@@ -657,17 +660,21 @@ export default function PanelTecnico() {
 
       {/* RESUMEN */}
 
-      <View style={styles.resumen}>
-        <Ionicons
-          name="briefcase-outline"
-          size={28}
-          color={C.azul}
-        />
+      <View style={[
+        styles.resumen,
+        pantallaPequena && styles.resumenMovil,
+      ]}>
+        <View style={styles.estadistica}>
+          <Ionicons
+            name="briefcase-outline"
+            size={24}
+            color={C.azul}
+          />
 
-        <View>
           <Text style={styles.numero}>
             {solicitudesRecomendadas.length}
           </Text>
+
           <Text style={styles.secundario}>
             Trabajos para mí
           </Text>
@@ -675,10 +682,17 @@ export default function PanelTecnico() {
 
         <View style={styles.separadorVertical} />
 
-        <View>
+        <View style={styles.estadistica}>
+          <Ionicons
+            name="clipboard-outline"
+            size={24}
+            color={C.azul}
+          />
+
           <Text style={styles.numero}>
             {solicitudes.length}
           </Text>
+
           <Text style={styles.secundario}>
             Publicaciones disponibles
           </Text>
@@ -687,7 +701,10 @@ export default function PanelTecnico() {
 
       {/* ESPECIALIDADES */}
 
-      <View style={styles.tarjeta}>
+      <View style={[
+          styles.tarjeta,
+          pantallaPequena && styles.tarjetaMovil,
+        ]}>
         <View style={styles.fila}>
           <Ionicons
             name="construct-outline"
@@ -755,7 +772,10 @@ export default function PanelTecnico() {
 
       {/* TRABAJOS DISPONIBLES */}
 
-      <View style={styles.encabezadoSeccion}>
+      <View style={[
+        styles.encabezadoSeccion,
+        pantallaPequena && styles.encabezadoSeccionMovil,
+      ]}>
         <View>
           <Text style={styles.titulo}>
             Trabajos disponibles
@@ -794,10 +814,14 @@ export default function PanelTecnico() {
 
       {/* FILTROS */}
 
-      <View style={styles.fila}>
+      <View style={[
+        styles.fila,
+        pantallaPequena && styles.filtrosMovil,
+      ]}>
         <Pressable
           style={[
             styles.botonFiltro,
+            pantallaPequena && styles.botonFiltroMovil,
             filtro === 'recomendados' &&
               styles.filtroActivo,
           ]}
@@ -830,6 +854,7 @@ export default function PanelTecnico() {
         <Pressable
           style={[
             styles.botonFiltro,
+            pantallaPequena && styles.botonFiltroMovil,
             filtro === 'todos' &&
               styles.filtroActivo,
           ]}
@@ -965,7 +990,10 @@ export default function PanelTecnico() {
           return (
             <View
               key={solicitud.id}
-              style={styles.tarjeta}
+              style={[
+          styles.tarjeta,
+          pantallaPequena && styles.tarjetaMovil,
+        ]}
             >
               {/* CLIENTE */}
 
@@ -1273,13 +1301,6 @@ export default function PanelTecnico() {
             </View>
           );
         })}
-
-      <Text style={styles.nota}>
-        Las publicaciones se consultan desde
-        FastAPI y MongoDB Atlas. Las
-        recomendaciones utilizan las
-        especialidades de tu perfil profesional.
-      </Text>
     </ScrollView>
   );
 }
@@ -1289,6 +1310,89 @@ export default function PanelTecnico() {
 // ==========================================
 
 const styles = StyleSheet.create({
+
+  contenidoMovil: {
+    padding: 12,
+    paddingBottom: 45,
+    gap: 14,
+  },
+
+  encabezadoMovil: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    padding: 14,
+    gap: 14,
+  },
+
+  marcaContenedor: {
+    flex: 1,
+    minWidth: 150,
+  },
+
+  marcaContenedorMovil: {
+    width: '100%',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.borde,
+  },
+
+  navegacionMovil: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+
+  botonNavegacionMovil: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 10,
+    gap: 7,
+    borderRadius: 10,
+    backgroundColor: C.azulClaro,
+  },
+
+  resumenMovil: {
+    padding: 14,
+    gap: 12,
+    flexWrap: 'nowrap',
+    alignItems: 'stretch',
+  },
+
+  estadistica: {
+    flex: 1,
+    minWidth: 0,
+    gap: 5,
+    alignItems: 'flex-start',
+  },
+
+  tarjetaMovil: {
+    padding: 14,
+    gap: 12,
+  },
+
+  encabezadoSeccionMovil: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+
+  filtrosMovil: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 9,
+  },
+
+  botonFiltroMovil: {
+    width: '100%',
+    minHeight: 48,
+  },
+
   pantalla: {
     flex: 1,
     backgroundColor: C.fondo,
@@ -1383,6 +1487,8 @@ const styles = StyleSheet.create({
   },
 
   textoBlanco: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: C.blanco,
     fontWeight: '700',
   },
@@ -1394,6 +1500,7 @@ const styles = StyleSheet.create({
   },
 
   secundario: {
+    flexShrink: 1,
     color: C.gris,
     fontSize: 13,
     lineHeight: 20,
@@ -1450,6 +1557,7 @@ const styles = StyleSheet.create({
   },
 
   tituloMediano: {
+    flexShrink: 1,
     fontSize: 18,
     fontWeight: '800',
     color: C.oscuro,
@@ -1515,6 +1623,7 @@ const styles = StyleSheet.create({
   },
 
   errorTexto: {
+    flexShrink: 1,
     color: C.rojo,
     fontSize: 13,
     lineHeight: 20,
@@ -1579,6 +1688,7 @@ const styles = StyleSheet.create({
   },
 
   categoria: {
+    flexShrink: 1,
     color: C.azul,
     fontWeight: '700',
   },

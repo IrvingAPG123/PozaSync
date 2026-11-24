@@ -2,3 +2,43 @@
 .env
 __pycache__/
 *.pyc
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Entornos virtuales
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node.js
+node_modules/
+dist/
+
+# Expo
+.expo/
+
+# Compilaciones Android
+*.apk
+*.aab
+.gradle/
+android/app/build/
+android/build/
+
+# Credenciales
+*.jks
+*.keystore
+*.pem
+*.key
+credentials.json
+local.properties
+
+# Archivos temporales
+*.bak
+*.log
+*.tmp

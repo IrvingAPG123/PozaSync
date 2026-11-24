@@ -155,6 +155,7 @@ def crear_servicio(
             "_id": solicitud_id,
             "cliente_id": usuario["_id"],
             "estado": "publicada",
+            "bloqueada_administrativamente": {"$ne": True},
         })
 
         tecnico = usuarios.find_one({

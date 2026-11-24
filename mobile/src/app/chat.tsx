@@ -1,3 +1,4 @@
+import { obtenerToken } from '../services/tokenStorage';
 
 import React, {
   useCallback,
@@ -8,6 +9,7 @@ import React, {
 
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   Image,
   Modal,
@@ -24,7 +26,11 @@ import {
 
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { router, useLocalSearchParams } from 'expo-router';
+import {
+  router,
+  useLocalSearchParams,
+  useFocusEffect,
+} from 'expo-router';
 
 // ==========================================
 // CONFIGURACION DE LA API
@@ -150,19 +156,6 @@ const C = {
 // ==========================================
 // FUNCIONES AUXILIARES
 // ==========================================
-
-function obtenerToken(): string | null {
-  if (
-    Platform.OS !== 'web' ||
-    typeof window === 'undefined'
-  ) {
-    return null;
-  }
-
-  return window.sessionStorage.getItem(
-    'pozasync_token'
-  );
-}
 
 async function leerError(
   respuesta: Response
@@ -371,7 +364,7 @@ export default function Chat() {
       ruta: string,
       opciones: RequestInit = {}
     ): Promise<Response> => {
-      const token = obtenerToken();
+      const token = await obtenerToken();
 
       if (!token) {
         router.replace('/');
@@ -516,7 +509,7 @@ export default function Chat() {
 
   const cargarChat = useCallback(
     async (mostrarCarga = true) => {
-      const token = obtenerToken();
+      const token = await obtenerToken();
 
       if (!token) {
         router.replace('/');
@@ -656,6 +649,145 @@ export default function Chat() {
   useEffect(() => {
     void cargarChat();
   }, [cargarChat]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!conversacionId || !usuario || cargando) {
+        return;
+      }
+
+      const usuarioId = usuario.id;
+
+      let activo = true;
+      let consultando = false;
+      const controlador = new AbortController();
+
+      async function sincronizar() {
+        if (
+          !activo ||
+          consultando ||
+          AppState.currentState !== 'active' ||
+          enviando ||
+          procesandoServicio ||
+          actualizando
+        ) {
+          return;
+        }
+
+        consultando = true;
+
+        try {
+          const token = await obtenerToken();
+
+          if (!token || !activo) return;
+
+          const headers = {
+            Authorization: `Bearer ${token}`,
+          };
+
+          const ruta =
+            `${API_URL}/conversaciones/` +
+            encodeURIComponent(conversacionId);
+
+          const respuesta = await fetch(
+            `${ruta}/mensajes`,
+            {
+              headers,
+              signal: controlador.signal,
+            }
+          );
+
+          if (!respuesta.ok || !activo) return;
+
+          const datos: RespuestaMensajes =
+            await respuesta.json();
+
+          if (
+            !activo ||
+            !Array.isArray(datos.mensajes)
+          ) {
+            return;
+          }
+
+          setMensajes((anteriores) => {
+            const mapa = new Map(
+              anteriores.map((m) => [m.id, m])
+            );
+
+            datos.mensajes.forEach((m) => {
+              mapa.set(m.id, m);
+            });
+
+            return Array.from(mapa.values()).sort(
+              (a, b) =>
+                (a.fecha_envio || '').localeCompare(
+                  b.fecha_envio || ''
+                )
+            );
+          });
+
+          if (
+            datos.mensajes.some(
+              (m) =>
+                m.remitente_id !== usuarioId &&
+                !m.leido
+            )
+          ) {
+            await marcarComoLeidos(token);
+          }
+
+          if (!activo) return;
+
+          const respuestaServicio = await fetch(
+            `${API_URL}/servicios/` +
+              encodeURIComponent(conversacionId),
+            {
+              headers,
+              signal: controlador.signal,
+            }
+          );
+
+          if (!activo) return;
+
+          if (respuestaServicio.ok) {
+            const datosServicio: Servicio =
+              await respuestaServicio.json();
+
+            if (activo) {
+              setServicio(datosServicio);
+            }
+          } else if (respuestaServicio.status === 404) {
+            setServicio(null);
+            setResena(null);
+          }
+
+        } catch {
+          // Reintentar en la siguiente consulta.
+        } finally {
+          consultando = false;
+        }
+      }
+
+      const intervalo = setInterval(
+        () => void sincronizar(),
+        3000
+      );
+
+      return () => {
+        activo = false;
+        clearInterval(intervalo);
+        controlador.abort();
+      };
+    }, [
+      conversacionId,
+      usuario,
+      cargando,
+      enviando,
+      procesandoServicio,
+      actualizando,
+      marcarComoLeidos,
+    ])
+  );
 
   // ========================================
   // ACCIONES DEL SERVICIO
@@ -868,7 +1000,9 @@ export default function Chat() {
   // SELECCIONAR FOTOGRAFIA
   // ========================================
 
-  async function seleccionarFotografia() {
+  async function seleccionarFotografia(
+    origen: 'camara' | 'galeria' = 'galeria'
+  ) {
     if (
       enviando ||
       seleccionandoImagen ||
@@ -881,13 +1015,31 @@ export default function Chat() {
     setError('');
 
     try {
-      const resultado =
-        await ImagePicker.launchImageLibraryAsync({
+      let resultado: ImagePicker.ImagePickerResult;
+
+      if (origen === 'camara') {
+        const permiso =
+          await ImagePicker.requestCameraPermissionsAsync();
+
+        if (!permiso.granted) {
+          throw new Error(
+            'Permite el acceso a la cámara desde los ajustes de tu dispositivo.'
+          );
+        }
+
+        resultado = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.7,
+        });
+      } else {
+        resultado = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           allowsMultipleSelection: false,
           allowsEditing: false,
-          quality: 1,
+          quality: 0.7,
         });
+      }
 
       if (
         resultado.canceled ||
@@ -1083,7 +1235,7 @@ export default function Chat() {
       return;
     }
 
-    const token = obtenerToken();
+    const token = await obtenerToken();
 
     if (!token) {
       router.replace('/');
@@ -1904,9 +2056,27 @@ export default function Chat() {
 
         {conversacion ? (
           <View style={styles.areaEscritura}>
+
+            {Platform.OS !== 'web' && (
+              <Pressable
+                onPress={() =>
+                  void seleccionarFotografia('camara')
+                }
+                disabled={enviando || seleccionandoImagen}
+                style={styles.botonAdjuntar}
+                accessibilityLabel="Tomar fotografía"
+              >
+                <Ionicons
+                  name="camera-outline"
+                  size={24}
+                  color={C.azul}
+                />
+              </Pressable>
+            )}
+
             <Pressable
               onPress={() =>
-                void seleccionarFotografia()
+                void seleccionarFotografia('galeria')
               }
               disabled={
                 enviando ||
@@ -2312,15 +2482,15 @@ const styles = StyleSheet.create({
   areaEscritura: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 10,
-    padding: 14,
+    gap: 6,
+    padding: 8,
     borderTopWidth: 1,
     borderTopColor: C.borde,
   },
 
   botonAdjuntar: {
-    width: 46,
-    height: 46,
+    width: 40,
+    height: 44,
     borderRadius: 12,
     backgroundColor: C.azulClaro,
     alignItems: 'center',
@@ -2331,6 +2501,7 @@ const styles = StyleSheet.create({
 
   entrada: {
     flex: 1,
+    minWidth: 0,
     minHeight: 45,
     maxHeight: 130,
     padding: 12,
@@ -2458,11 +2629,15 @@ const styles = StyleSheet.create({
 
   filaBotones: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
 
   botonServicio: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 0,
+    minHeight: 46,
+    alignSelf: 'stretch',
     backgroundColor: C.azul,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -2480,8 +2655,9 @@ const styles = StyleSheet.create({
   },
 
   textoBotonServicio: {
-    color: C.blanco,
-    fontSize: 13,
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: '800',
     textAlign: 'center',
   },

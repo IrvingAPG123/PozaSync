@@ -1,3 +1,4 @@
+import { obtenerToken, borrarToken } from '../services/tokenStorage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,41 +28,12 @@ const API_URL =
     : process.env.EXPO_PUBLIC_API_URL ||
       'http://127.0.0.1:8001';
 
-const CLAVE_TOKEN = 'pozasync_token';
-
-function obtenerToken(): string | null {
-  if (
-    Platform.OS !== 'web' ||
-    typeof window === 'undefined'
-  ) {
-    return null;
-  }
-
-  try {
-    return window.sessionStorage.getItem(CLAVE_TOKEN);
-  } catch {
-    return null;
-  }
-}
-
-function borrarToken() {
-  if (
-    Platform.OS === 'web' &&
-    typeof window !== 'undefined'
-  ) {
-    try {
-      window.sessionStorage.removeItem(CLAVE_TOKEN);
-    } catch {
-      // El navegador podría bloquear el almacenamiento.
-    }
-  }
-}
 
 async function solicitarAPI(
   ruta: string,
   opciones: RequestInit = {}
 ): Promise<any> {
-  const token = obtenerToken();
+  const token = await obtenerToken();
 
   if (!token) {
     throw new Error(
@@ -82,7 +54,7 @@ async function solicitarAPI(
     });
   } catch {
     throw new Error(
-      'No se pudo conectar con FastAPI. Comprueba que esté funcionando en el puerto 8001.'
+      'No se pudo conectar con PozaSync. Comprueba tu conexión a Internet e inténtalo nuevamente.'
     );
   }
 
@@ -91,13 +63,13 @@ async function solicitarAPI(
   if (!respuesta.ok) {
     if (respuesta.status === 401) {
       throw new Error(
-        'Tu sesión expiró o el token no es válido. Inicia sesión nuevamente.'
+        'Tu sesión ha expirado. Inicia sesión nuevamente.'
       );
     }
 
     if (respuesta.status === 404) {
       throw new Error(
-        'No se encontró la ruta solicitada en FastAPI. Comprueba que el router de solicitudes esté registrado.'
+        'El servicio solicitado no está disponible en este momento.'
       );
     }
 
@@ -315,7 +287,7 @@ export default function PanelCliente() {
   const [mensajesSinLeer, setMensajesSinLeer] = useState(0);
 
   const actualizarMensajesSinLeer = useCallback(async () => {
-    if (!obtenerToken()) return;
+    if (!(await obtenerToken())) return;
 
     try {
       const datos = await solicitarAPI('/conversaciones');
@@ -435,7 +407,7 @@ export default function PanelCliente() {
 
       if (!Array.isArray(datos?.solicitudes)) {
         throw new Error(
-          'FastAPI no devolvió una lista válida de solicitudes.'
+          'No se pudieron obtener tus solicitudes.'
         );
       }
 
@@ -585,60 +557,97 @@ export default function PanelCliente() {
     setSeccion('nueva-solicitud');
   }
 
-  async function seleccionarFotografias() {
+  async function seleccionarFotografias(
+    origen: 'camara' | 'galeria' = 'galeria'
+  ) {
     const disponibles = 5 - fotosSeleccionadas.length;
 
     if (disponibles <= 0) {
-      Alert.alert(
-        'Límite alcanzado',
-        'Puedes seleccionar un máximo de 5 fotografías.'
+      setErrorSolicitud(
+        'Puedes agregar un máximo de 5 fotografías.'
       );
       return;
     }
 
-    const resultado = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      selectionLimit: disponibles,
-      quality: 0.9,
-    });
+    setErrorSolicitud('');
 
-    if (resultado.canceled) {
-      return;
-    }
+    try {
+      let resultado: ImagePicker.ImagePickerResult;
 
-    const permitidos = [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-    ];
+      if (origen === 'camara') {
+        if (Platform.OS === 'web') {
+          setErrorSolicitud(
+            'Utiliza la galería para agregar fotografías desde el navegador.'
+          );
+          return;
+        }
 
-    const validas = resultado.assets.filter((foto) => {
-      const tipo = foto.mimeType || 'image/jpeg';
-      const peso = foto.fileSize || 0;
+        const permiso =
+          await ImagePicker.requestCameraPermissionsAsync();
 
-      return (
-        permitidos.includes(tipo) &&
-        peso <= 5 * 1024 * 1024
+        if (!permiso.granted) {
+          setErrorSolicitud(
+            'Permite el acceso a la cámara desde los ajustes de tu dispositivo.'
+          );
+          return;
+        }
+
+        resultado = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.7,
+        });
+
+      } else {
+        resultado = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsMultipleSelection: true,
+          selectionLimit: disponibles,
+          quality: 0.7,
+        });
+      }
+
+      if (resultado.canceled) {
+        return;
+      }
+
+      const permitidos = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+      ];
+
+      const validas = resultado.assets.filter((foto) => {
+        const tipo = foto.mimeType || 'image/jpeg';
+        const peso = foto.fileSize || 0;
+
+        return (
+          permitidos.includes(tipo) &&
+          peso <= 5 * 1024 * 1024
+        );
+      });
+
+      if (validas.length !== resultado.assets.length) {
+        setErrorSolicitud(
+          'Solo se permiten fotografías JPG, PNG y WebP de hasta 5 MB.'
+        );
+      }
+
+      setFotosSeleccionadas((anteriores) =>
+        [...anteriores, ...validas].slice(0, 5)
       );
-    });
 
-    if (validas.length !== resultado.assets.length) {
-      Alert.alert(
-        'Fotografías no válidas',
-        'Solo se permiten JPG, PNG y WebP de hasta 5 MB.'
+    } catch {
+      setErrorSolicitud(
+        'No se pudieron obtener las fotografías. Inténtalo nuevamente.'
       );
     }
-
-    setFotosSeleccionadas((anteriores) =>
-      [...anteriores, ...validas].slice(0, 5)
-    );
   }
 
   async function subirFotografias(
     solicitudId: string
   ): Promise<number> {
-    const token = obtenerToken();
+    const token = await obtenerToken();
 
     if (!token) {
       throw new Error('Tu sesión ha expirado.');
@@ -769,7 +778,7 @@ export default function PanelCliente() {
 
       if (!datos?.solicitud?.id) {
         throw new Error(
-          'FastAPI no confirmó que la solicitud se haya guardado.'
+          'No se pudo confirmar que tu solicitud se haya guardado.'
         );
       }
 
@@ -816,7 +825,7 @@ export default function PanelCliente() {
       setMensajeExito(
         (solicitudEditandoId
           ? 'Tu borrador se actualizó correctamente.'
-          : 'Tu borrador se guardó correctamente en MongoDB Atlas.') +
+          : 'Tu borrador se guardó correctamente.') +
           avisoFotografias
       );
 
@@ -860,7 +869,7 @@ export default function PanelCliente() {
 
         if (!datos?.solicitud?.id) {
           throw new Error(
-            'FastAPI no confirmó que la solicitud se haya publicado.'
+            'No se pudo confirmar la publicación de tu solicitud.'
           );
         }
 
@@ -978,7 +987,7 @@ export default function PanelCliente() {
         const confirmar = window.confirm(
           publicada
             ? '¿Quieres retirar esta publicación? Dejará de ser visible para los técnicos.'
-            : '¿Quieres eliminar este borrador de MongoDB?'
+            : '¿Quieres eliminar este borrador?'
         );
 
         if (confirmar) {
@@ -1015,8 +1024,8 @@ export default function PanelCliente() {
   // ========================================
 
   function cerrarSesion() {
-    const salir = () => {
-      borrarToken();
+    const salir = async () => {
+      await borrarToken();
       setSolicitudes([]);
       setPerfil(null);
       setMensajesSinLeer(0);
@@ -1024,7 +1033,7 @@ export default function PanelCliente() {
     };
 
     if (Platform.OS === 'web') {
-      salir();
+      void salir();
       return;
     }
 
@@ -1039,7 +1048,7 @@ export default function PanelCliente() {
         {
           text: 'Salir',
           style: 'destructive',
-          onPress: salir,
+          onPress: () => { void salir(); },
         },
       ]
     );
@@ -1361,11 +1370,9 @@ export default function PanelCliente() {
 
             <Text style={styles.informativoDescripcion}>
               Selecciona una categoría y prepara
-              una solicitud. Tus borradores se
-              guardan en MongoDB Atlas.
-              Puedes publicarlos cuando estén
-              listos para que los técnicos
-              registrados puedan consultarlos.
+              tu solicitud. Puedes publicarla cuando
+              esté lista para que los técnicos
+              puedan consultarla.
             </Text>
           </View>
         </View>
@@ -1474,11 +1481,9 @@ export default function PanelCliente() {
           />
 
           <Text style={styles.textoAviso}>
-            Puedes preparar borradores que se
-            guardarán en MongoDB Atlas.
-            Después podrás publicarlos para
-            que los técnicos registrados
-            puedan consultarlos.
+            Prepara tu solicitud y publícala cuando
+            esté lista para recibir propuestas
+            de los técnicos.
           </Text>
         </View>
       </>
@@ -1625,23 +1630,73 @@ export default function PanelCliente() {
               Máximo 5 MB por imagen.
             </Text>
 
-            <Pressable
-              onPress={seleccionarFotografias}
-              disabled={guardandoSolicitud || subiendoFotografias}
-              style={{
-                borderWidth: 1,
-                borderColor: '#2563EB',
-                borderRadius: 12,
-                padding: 14,
-                alignItems: 'center',
-                backgroundColor: '#EFF6FF',
-                opacity: guardandoSolicitud ? 0.5 : 1,
-              }}
-            >
-              <Text style={{ color: '#1D4ED8', fontWeight: '700' }}>
-                Seleccionar fotografías ({fotosSeleccionadas.length}/5)
-              </Text>
-            </Pressable>
+            <View style={styles.accionesFotografias}>
+
+              {Platform.OS !== 'web' && (
+                <Pressable
+                  style={[
+                    styles.botonFotografia,
+                    (guardandoSolicitud ||
+                      subiendoFotografias ||
+                      fotosSeleccionadas.length >= 5) &&
+                      styles.botonInactivo,
+                  ]}
+                  disabled={
+                    guardandoSolicitud ||
+                    subiendoFotografias ||
+                    fotosSeleccionadas.length >= 5
+                  }
+                  onPress={() => {
+                    void seleccionarFotografias('camara');
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Ionicons
+                    name="camera-outline"
+                    size={27}
+                    color={C.azul}
+                  />
+
+                  <Text style={styles.textoBotonFotografia}>
+                    Tomar fotografía
+                  </Text>
+                </Pressable>
+              )}
+
+              <Pressable
+                style={[
+                  styles.botonFotografia,
+                  (guardandoSolicitud ||
+                    subiendoFotografias ||
+                    fotosSeleccionadas.length >= 5) &&
+                    styles.botonInactivo,
+                ]}
+                disabled={
+                  guardandoSolicitud ||
+                  subiendoFotografias ||
+                  fotosSeleccionadas.length >= 5
+                }
+                onPress={() => {
+                  void seleccionarFotografias('galeria');
+                }}
+                accessibilityRole="button"
+              >
+                <Ionicons
+                  name="images-outline"
+                  size={27}
+                  color={C.azul}
+                />
+
+                <Text style={styles.textoBotonFotografia}>
+                  Abrir galería
+                </Text>
+              </Pressable>
+
+            </View>
+
+            <Text style={styles.contadorFotografias}>
+              {fotosSeleccionadas.length} de 5 fotografías seleccionadas
+            </Text>
 
             <View
               style={{
@@ -1705,10 +1760,9 @@ export default function PanelCliente() {
             />
 
             <Text style={styles.textoAviso}>
-              Este formulario guarda un borrador
-              en MongoDB Atlas mediante FastAPI.
-              Después podrás publicarlo desde
-              Mis solicitudes.
+              Tu solicitud se guardará como borrador.
+              Podrás publicarla desde Mis solicitudes
+              cuando esté lista.
             </Text>
           </View>
 
@@ -1730,7 +1784,7 @@ export default function PanelCliente() {
             <View style={styles.filaCargando}>
               <ActivityIndicator color={C.azul} />
               <Text style={styles.textoCargando}>
-                Guardando en MongoDB...
+                Guardando solicitud...
               </Text>
             </View>
           ) : (
@@ -1841,7 +1895,7 @@ export default function PanelCliente() {
             />
 
             <Text style={styles.textoVacio}>
-              Cargando solicitudes desde MongoDB...
+              Cargando solicitudes...
             </Text>
           </View>
         ) : errorListado.length > 0 &&
@@ -2115,9 +2169,7 @@ export default function PanelCliente() {
         )}
 
         <Text style={styles.notaTemporal}>
-          Tus solicitudes se almacenan en MongoDB
-          Atlas y se recuperan desde FastAPI.
-          Los borradores son privados hasta
+          Tus borradores son privados hasta
           que decidas publicarlos.
         </Text>
       </>
@@ -2186,20 +2238,7 @@ export default function PanelCliente() {
           </View>
         )}
 
-        <View style={styles.aviso}>
-          <Ionicons
-            name="shield-checkmark-outline"
-            size={22}
-            color={C.azul}
-          />
-
-          <Text style={styles.textoAviso}>
-            Tu cuenta se autentica con FastAPI
-            mediante JWT. Las solicitudes
-            pertenecen a tu usuario y se
-            guardan en MongoDB Atlas.
-          </Text>
-        </View>
+        
 
         <Pressable
           style={styles.cerrarSesion}
@@ -2318,6 +2357,42 @@ export default function PanelCliente() {
 // ==========================================
 
 const styles = StyleSheet.create({
+
+  accionesFotografias: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+
+  botonFotografia: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: C.azul,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 15,
+    backgroundColor: C.azulClaro,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+  },
+
+  textoBotonFotografia: {
+    color: C.azul,
+    fontWeight: '700',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+
+  contadorFotografias: {
+    fontSize: 12,
+    color: C.secundario,
+    textAlign: 'center',
+    marginTop: 12,
+  },
+
   pantalla: {
     flex: 1,
     backgroundColor: C.fondo,
@@ -2393,10 +2468,11 @@ const styles = StyleSheet.create({
   },
 
   enlaceNavegacion: {
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 2,
     gap: 5,
     borderRadius: 10,
     flex: 1,
@@ -2439,7 +2515,8 @@ const styles = StyleSheet.create({
   },
 
   textoNavegacion: {
-    fontSize: 12,
+    textAlign: 'center',
+    fontSize: 11,
     fontWeight: '600',
     color: C.secundario,
   },
@@ -3075,6 +3152,8 @@ const styles = StyleSheet.create({
   },
 
   pieSolicitud: {
+    flexWrap: 'wrap',
+    gap: 12,
     borderTopWidth: 1,
     borderTopColor: C.borde,
     marginTop: 13,

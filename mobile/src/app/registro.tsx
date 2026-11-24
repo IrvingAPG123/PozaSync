@@ -14,6 +14,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { buscarColonias, normalizarBusqueda } from '../constants/colonias';
+import { obtenerUbicacion } from '../services/ubicacion';
 
 const API_URL =
   Platform.OS === 'web'
@@ -38,28 +40,6 @@ type DireccionMapa = {
 // Lista inicial orientativa de colonias.
 // No es un catálogo oficial ni exhaustivo.
 // Se puede ampliar sin cambiar el formulario.
-const COLONIAS_SUGERIDAS = [
-  '27 de Septiembre',
-  'Anáhuac',
-  'Cazones',
-  'Centro',
-  'Chapultepec',
-  'Las Gaviotas',
-  'Laredo',
-  'Palma Sola',
-  'Petromex',
-  'Santa Emilia',
-  'Tajín',
-];
-
-function normalizarBusqueda(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('es')
-    .trim();
-}
-
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function obtenerMensajeError(detail: unknown): string {
@@ -115,6 +95,9 @@ export default function RegistroScreen() {
   const [mostrarSugerencias, setMostrarSugerencias] =
     useState(false);
 
+  const [coloniasGPS, setColoniasGPS] =
+    useState<string[]>([]);
+
   const [mostrarClave, setMostrarClave] = useState(false);
   const [mostrarConfirmacion, setMostrarConfirmacion] =
     useState(false);
@@ -137,14 +120,10 @@ export default function RegistroScreen() {
 
   const busquedaColonia = normalizarBusqueda(colonia);
 
-  const coloniasFiltradas =
-    busquedaColonia.length > 0
-      ? COLONIAS_SUGERIDAS.filter((nombreColonia) =>
-          normalizarBusqueda(nombreColonia).includes(
-            busquedaColonia
-          )
-        ).slice(0, 6)
-      : [];
+  const coloniasFiltradas = buscarColonias(
+    colonia,
+    coloniasGPS
+  );
 
   function seleccionarColonia(nombreColonia: string) {
     setColonia(nombreColonia);
@@ -221,9 +200,38 @@ export default function RegistroScreen() {
     setMostrarSugerencias(false);
 
     if (Platform.OS !== 'web') {
-      setMensajeUbicacion(
-        'La ubicación automática estará disponible en la versión móvil próximamente. Por ahora, escribe tu colonia.'
-      );
+      setBuscandoUbicacion(true);
+
+      try {
+        const resultado = await obtenerUbicacion();
+
+        setColoniasGPS(resultado.sugerencias);
+
+        if (resultado.colonia &&
+            resultado.precision !== null &&
+            resultado.precision <= 1000) {
+          setColonia(resultado.colonia.slice(0, 100));
+          setUbicacionDetectada(true);
+          setMensajeUbicacion(
+            'Colonia aproximada detectada. Comprueba que sea correcta.'
+          );
+        } else {
+          setColonia('');
+          setMostrarSugerencias(true);
+          setMensajeUbicacion(
+            'No encontramos tu colonia exacta. Selecciona una de la lista o escríbela.'
+          );
+        }
+      } catch {
+        setColonia('');
+        setMostrarSugerencias(true);
+        setMensajeUbicacion(
+          'No pudimos obtener tu ubicación. Busca o selecciona tu colonia.'
+        );
+      } finally {
+        setBuscandoUbicacion(false);
+      }
+
       return;
     }
 
@@ -231,6 +239,7 @@ export default function RegistroScreen() {
       typeof navigator === 'undefined' ||
       !navigator.geolocation
     ) {
+      setMostrarSugerencias(true);
       setMensajeUbicacion(
         'Tu navegador no permite obtener la ubicación. Escribe tu colonia manualmente.'
       );
@@ -304,6 +313,8 @@ export default function RegistroScreen() {
       );
 
       if (!coloniaEncontrada) {
+        setColonia('');
+        setMostrarSugerencias(true);
         setMensajeUbicacion(
           'Encontramos tu ubicación, pero el mapa no identifica la colonia. Búscala en las sugerencias o escríbela manualmente.'
         );
@@ -313,6 +324,9 @@ export default function RegistroScreen() {
       // En computadoras la ubicación puede ser
       // demasiado imprecisa para identificar colonia.
       if (precision > 1000) {
+        setColoniasGPS([coloniaEncontrada]);
+        setColonia('');
+        setMostrarSugerencias(true);
         setMensajeUbicacion(
           `El navegador estima tu ubicación con una precisión aproximada de ${Math.round(
             precision
@@ -333,6 +347,7 @@ export default function RegistroScreen() {
 
       limpiarMensaje();
     } catch (error) {
+      setMostrarSugerencias(true);
       const codigo =
         typeof error === 'object' &&
         error !== null &&
@@ -882,7 +897,7 @@ export default function RegistroScreen() {
                 <Pressable
                   onPress={() => {
                     setColonia('');
-                    setMostrarSugerencias(false);
+                    setMostrarSugerencias(true);
                     setMensajeUbicacion('');
                   }}
                   disabled={cargando || buscandoUbicacion}
@@ -905,11 +920,40 @@ export default function RegistroScreen() {
               )}
             </View>
 
+            <Pressable
+              style={styles.botonUbicacion}
+              disabled={cargando || buscandoUbicacion}
+              onPress={() => {
+                if (mostrarSugerencias) {
+                  setMostrarSugerencias(false);
+                } else {
+                  setColonia('');
+                  setUbicacionDetectada(false);
+                  setMostrarSugerencias(true);
+                }
+              }}
+            >
+              <Ionicons
+                name="list-outline"
+                size={19}
+                color="#1D4ED8"
+              />
+              <Text style={styles.textoBotonUbicacion}>
+                {mostrarSugerencias
+                  ? 'Ocultar listado de colonias'
+                  : 'Ver listado de colonias'}
+              </Text>
+            </Pressable>
+
             {/* SUGERENCIAS */}
 
             {mostrarSugerencias &&
               coloniasFiltradas.length > 0 && (
-                <View style={styles.listaSugerencias}>
+                <ScrollView
+                  style={[styles.listaSugerencias, { maxHeight: 240 }]}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                >
                   {coloniasFiltradas.map(
                     (nombreColonia) => (
                       <Pressable
@@ -944,7 +988,7 @@ export default function RegistroScreen() {
                       </Pressable>
                     )
                   )}
-                </View>
+                </ScrollView>
               )}
 
             {/* SI NO HAY SUGERENCIAS */}
@@ -960,7 +1004,7 @@ export default function RegistroScreen() {
                   />
 
                   <Text style={styles.textoSinSugerencias}>
-                    No está en la lista inicial. Puedes
+                    No encontramos esa colonia. Puedes
                     escribir tu colonia manualmente.
                   </Text>
                 </View>
@@ -1030,10 +1074,8 @@ export default function RegistroScreen() {
             ) : null}
 
             <Text style={styles.ayudaColonia}>
-              Las sugerencias son una lista inicial,
-              no un catálogo completo. Puedes escribir
-              cualquier colonia manualmente. No guardamos
-              tus coordenadas GPS en el registro.
+              Selecciona tu colonia de la lista o escríbela
+              manualmente si no aparece.
             </Text>
 
             {/* ================================= */}

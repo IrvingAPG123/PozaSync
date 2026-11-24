@@ -170,6 +170,7 @@ def convertir_solicitud(documento, cliente_publico=None):
         "colonia": documento["colonia"],
         "ciudad": documento.get("ciudad", "Poza Rica"),
         "estado": documento.get("estado", "borrador"),
+        "bloqueada": documento.get("bloqueada_administrativamente") is True,
         "imagenes": documento.get("imagenes", []),
         "fecha_creacion": (
             fecha.isoformat() if fecha else None
@@ -243,6 +244,7 @@ def crear_solicitud(
         "colonia": colonia,
         "ciudad": cliente.get("ciudad") or "Poza Rica",
         "estado": "borrador",
+        "bloqueada_administrativamente": False,
         "imagenes": [],
         "fecha_creacion": fecha_actual,
         "fecha_actualizacion": fecha_actual,
@@ -308,7 +310,8 @@ def obtener_solicitudes_disponibles(
     try:
         documentos = list(
             solicitudes.find({
-                "estado": "publicada"
+                "estado": "publicada",
+                "bloqueada_administrativamente": {"$ne": True},
             })
             .sort("fecha_publicacion", -1)
             .limit(100)
@@ -441,6 +444,7 @@ async def agregar_imagen_solicitud(
         "_id": ObjectId(solicitud_id),
         "cliente_id": cliente["_id"],
         "estado": "borrador",
+        "bloqueada_administrativamente": {"$ne": True},
     }
 
     try:
@@ -535,6 +539,7 @@ def eliminar_imagen_solicitud(
         "_id": ObjectId(solicitud_id),
         "cliente_id": cliente["_id"],
         "estado": "borrador",
+        "bloqueada_administrativamente": {"$ne": True},
         "imagenes.public_id": public_id,
     }
 
@@ -619,6 +624,7 @@ def publicar_solicitud(
                 "_id": ObjectId(solicitud_id),
                 "cliente_id": cliente["_id"],
                 "estado": "borrador",
+                "bloqueada_administrativamente": {"$ne": True},
             },
             {
                 "$set": {
@@ -694,6 +700,7 @@ def editar_solicitud(
                 "_id": ObjectId(solicitud_id),
                 "cliente_id": cliente["_id"],
                 "estado": "borrador",
+                "bloqueada_administrativamente": {"$ne": True},
             },
             {
                 "$set": {
@@ -803,6 +810,7 @@ def eliminar_solicitud(
         "_id": ObjectId(solicitud_id),
         "cliente_id": cliente["_id"],
         "estado": "borrador",
+        "bloqueada_administrativamente": {"$ne": True},
     }
 
     try:

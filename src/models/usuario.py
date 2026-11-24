@@ -1,4 +1,3 @@
-
 from typing import Literal
 
 from pydantic import (
@@ -8,6 +7,19 @@ from pydantic import (
     Field,
     field_validator,
 )
+
+
+# ==========================================
+# ROLES DE POZASYNC
+# ==========================================
+
+RolPublico = Literal["cliente", "tecnico"]
+
+RolUsuario = Literal[
+    "cliente",
+    "tecnico",
+    "administrador",
+]
 
 
 # ==========================================
@@ -38,7 +50,9 @@ class UsuarioRegistro(ModeloPozaSync):
         max_length=128,
     )
 
-    rol: Literal["cliente", "tecnico"]
+    # El administrador no puede registrarse
+    # mediante el formulario publico.
+    rol: RolPublico
 
     colonia: str = Field(
         min_length=2,
@@ -107,7 +121,7 @@ class UsuarioRespuesta(BaseModel):
 
     correo: EmailStr
 
-    rol: Literal["cliente", "tecnico"]
+    rol: RolUsuario
 
     colonia: str
 

@@ -41,6 +41,7 @@ def formatear_resena(resena):
         "tecnico_id": str(resena["tecnico_id"]),
         "calificacion": resena["calificacion"],
         "comentario": resena.get("comentario", ""),
+        "oculta": resena.get("oculta_administrativamente") is True,
         "fecha_creacion": (
             resena["fecha_creacion"].isoformat()
             if resena.get("fecha_creacion")
@@ -60,6 +61,8 @@ def actualizar_calificacion_tecnico(tecnico_id):
             {
                 "$match": {
                     "tecnico_id": tecnico_id,
+                    "oculta_administrativamente": {"$ne": True},
+                    "archivada_administrativamente": {"$ne": True},
                 }
             },
             {
@@ -120,6 +123,7 @@ def crear_resena(
         servicio = servicios.find_one({
             "_id": servicio_id,
             "cliente_id": usuario["_id"],
+            "archivado_administrativamente": {"$ne": True},
         })
     except PyMongoError:
         raise HTTPException(
@@ -172,6 +176,8 @@ def crear_resena(
         "tecnico_id": tecnico_id,
         "calificacion": datos.calificacion,
         "comentario": datos.comentario,
+        "oculta_administrativamente": False,
+        "archivada_administrativamente": False,
         "fecha_creacion": datetime.now(timezone.utc),
     }
 
@@ -222,6 +228,7 @@ def consultar_mis_resenas(
         documentos = list(
             resenas.find({
                 "cliente_id": usuario["_id"],
+                "archivada_administrativamente": {"$ne": True},
             })
             .sort("fecha_creacion", -1)
             .limit(100)
@@ -277,6 +284,8 @@ def consultar_resenas_tecnico(
         documentos = list(
             resenas.find({
                 "tecnico_id": tecnico_object_id,
+                "oculta_administrativamente": {"$ne": True},
+                "archivada_administrativamente": {"$ne": True},
             })
             .sort("fecha_creacion", -1)
             .limit(100)

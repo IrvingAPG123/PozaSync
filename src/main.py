@@ -10,6 +10,8 @@ from src.routes.solicitudes import router as solicitudes_router
 from src.routes.conversaciones import router as conversaciones_router
 from src.routes.servicios import router as servicios_router
 from src.routes.resenas import router as resenas_router
+from src.routes.admin import router as admin_router
+from src.routes.admin_solicitudes import router as admin_solicitudes_router
 
 
 # ==========================================
@@ -21,9 +23,10 @@ app = FastAPI(
     description=(
         "API para conectar clientes y tecnicos, "
         "publicar solicitudes, gestionar conversaciones, "
-        "registrar servicios y publicar calificaciones."
+        "registrar servicios, publicar calificaciones "
+        "y administrar la plataforma."
     ),
-    version="1.3.0",
+    version="1.4.0",
 )
 
 
@@ -38,6 +41,8 @@ app.add_middleware(
         "http://127.0.0.1:8081",
         "http://localhost:8082",
         "http://127.0.0.1:8082",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=False,
     allow_methods=[
@@ -65,6 +70,8 @@ app.include_router(solicitudes_router)
 app.include_router(conversaciones_router)
 app.include_router(servicios_router)
 app.include_router(resenas_router)
+app.include_router(admin_router)
+app.include_router(admin_solicitudes_router)
 
 
 # ==========================================
@@ -88,7 +95,12 @@ def obtener_usuarios():
     try:
         usuarios = list(
             db["usuarios"].find(
-                {},
+                {
+                    "rol": {
+                        "$in": ["cliente", "tecnico"]
+                    },
+                    "activo": True,
+                },
                 {
                     "_id": 0,
                     "nombre": 1,
@@ -111,26 +123,43 @@ def obtener_usuarios():
 
 
 # ==========================================
-# CONSULTAR TECNICOS
+# CONSULTAR TECNICOS ACTIVOS
 # ==========================================
 
 @app.get("/tecnicos")
 def obtener_tecnicos():
     try:
         tecnicos = list(
-            db["perfiles_tecnicos"].find(
-                {},
+            db["perfiles_tecnicos"].aggregate([
                 {
-                    "_id": 0,
-                    "usuario_id": 0,
-                    "especialidades": 1,
-                    "especialidad": 1,
-                    "disponible": 1,
-                    "descripcion": 1,
-                    "experiencia_anios": 1,
-                    "colonias_cobertura": 1,
+                    "$lookup": {
+                        "from": "usuarios",
+                        "localField": "usuario_id",
+                        "foreignField": "_id",
+                        "as": "usuario",
+                    }
                 },
-            )
+                {
+                    "$unwind": "$usuario",
+                },
+                {
+                    "$match": {
+                        "usuario.activo": True,
+                        "usuario.rol": "tecnico",
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,
+                        "especialidades": 1,
+                        "especialidad": 1,
+                        "disponible": 1,
+                        "descripcion": 1,
+                        "experiencia_anios": 1,
+                        "colonias_cobertura": 1,
+                    }
+                },
+            ])
         )
 
         return {
@@ -143,3 +172,23 @@ def obtener_tecnicos():
             status_code=503,
             detail="No se pudieron consultar los tecnicos",
         )
+
+from src.routes.admin_servicios import router as admin_servicios_router
+
+app.include_router(admin_servicios_router)
+
+
+from src.routes.admin_resenas import router as admin_resenas_router
+app.include_router(admin_resenas_router)
+
+
+from src.routes.admin_estadisticas import router as admin_estadisticas_router
+
+app.include_router(admin_estadisticas_router)
+
+from src.routes.admin_reportes import router as admin_reportes_router
+app.include_router(admin_reportes_router)
+
+from src.routes.admin_configuracion import router as admin_configuracion_router
+
+app.include_router(admin_configuracion_router)

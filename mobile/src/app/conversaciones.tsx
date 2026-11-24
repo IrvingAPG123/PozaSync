@@ -1,3 +1,4 @@
+import { obtenerToken } from '../services/tokenStorage';
 
 import React, {
   useCallback,
@@ -55,19 +56,6 @@ const C = {
   rojo: '#C62828',
 };
 
-function obtenerToken(): string | null {
-  if (
-    Platform.OS !== 'web' ||
-    typeof window === 'undefined'
-  ) {
-    return null;
-  }
-
-  return window.sessionStorage.getItem(
-    'pozasync_token'
-  );
-}
-
 async function leerError(
   respuesta: Response
 ): Promise<string> {
@@ -120,7 +108,7 @@ export default function Conversaciones() {
 
   const cargarConversaciones = useCallback(
     async (recarga = false) => {
-      const token = obtenerToken();
+      const token = await obtenerToken();
 
       if (!token) {
         router.replace('/');

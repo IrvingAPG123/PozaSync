@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { guardarToken, borrarToken } from '../services/tokenStorage';
 
 const API_URL =
   Platform.OS === 'web'
@@ -22,7 +23,6 @@ const API_URL =
     : process.env.EXPO_PUBLIC_API_URL ||
       'http://127.0.0.1:8001';
 
-const CLAVE_TOKEN = 'pozasync_token';
 
 type Usuario = {
   id: string;
@@ -49,22 +49,6 @@ function obtenerDetalle(detail: unknown): string {
   }
 
   return '';
-}
-
-function guardarTokenWeb(token: string): void {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return;
-  }
-
-  window.sessionStorage.setItem(CLAVE_TOKEN, token);
-}
-
-function limpiarTokenWeb(): void {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return;
-  }
-
-  window.sessionStorage.removeItem(CLAVE_TOKEN);
 }
 
 export default function InicioSesion() {
@@ -238,18 +222,10 @@ export default function InicioSesion() {
 
       // CLIENTE
       if (perfil.rol === 'cliente') {
-        if (Platform.OS === 'web') {
-          try {
-            guardarTokenWeb(token);
-          } catch {
-            throw new Error(
-              'No se pudo guardar la sesión en el navegador.'
-            );
-          }
-        } else {
-          throw new Error(
-            'El inicio de sesión en móvil requiere configurar almacenamiento seguro. Por ahora utiliza la versión web.'
-          );
+        try {
+          await guardarToken(token);
+        } catch {
+          throw new Error('No se pudo guardar la sesión de forma segura.');
         }
 
         setContrasena('');
@@ -262,18 +238,10 @@ export default function InicioSesion() {
       // ======================================
 
       if (perfil.rol === 'tecnico') {
-        if (Platform.OS === 'web') {
-          try {
-            guardarTokenWeb(token);
-          } catch {
-            throw new Error(
-              'No se pudo guardar la sesión en el navegador.'
-            );
-          }
-        } else {
-          throw new Error(
-            'El inicio de sesión en móvil requiere configurar almacenamiento seguro. Por ahora utiliza la versión web.'
-          );
+        try {
+          await guardarToken(token);
+        } catch {
+          throw new Error('No se pudo guardar la sesión de forma segura.');
         }
 
         setContrasena('');
@@ -283,7 +251,7 @@ export default function InicioSesion() {
 
       // ADMINISTRADOR
       if (perfil.rol === 'admin') {
-        limpiarTokenWeb();
+        await borrarToken();
         setContrasena('');
 
         setError(

@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pymongo.errors import PyMongoError
 
 from src.database import db
+from src.services.seguridad_http import instalar_seguridad_http
 
 from src.routes.auth import router as auth_router
 from src.routes.tecnicos import router as tecnicos_router
@@ -192,3 +193,6 @@ app.include_router(admin_reportes_router)
 from src.routes.admin_configuracion import router as admin_configuracion_router
 
 app.include_router(admin_configuracion_router)
+
+# PROTECCION GENERAL HTTP
+instalar_seguridad_http(app)

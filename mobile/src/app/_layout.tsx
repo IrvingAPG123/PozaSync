@@ -7,7 +7,8 @@ import {
 } from 'expo-router';
 
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, Platform } from 'react-native';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 
@@ -16,7 +17,7 @@ void SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
-  return (
+  const contenido = (
     <ThemeProvider
       value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
     >
@@ -42,5 +43,15 @@ export default function RootLayout() {
         <Stack.Screen name="panel-tecnico" />
       </Stack>
     </ThemeProvider>
+  );
+
+  if (Platform.OS === 'web') {
+    return contenido;
+  }
+
+  return (
+    <KeyboardProvider>
+      {contenido}
+    </KeyboardProvider>
   );
 }

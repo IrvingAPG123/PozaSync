@@ -1,3 +1,5 @@
+import FormularioDesplazable from '../components/FormularioDesplazable';
+import { adjuntarImagen, enviarFormularioImagen } from '../services/imagenes';
 import { obtenerToken, borrarToken } from '../services/tokenStorage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -665,35 +667,17 @@ export default function PanelCliente() {
           foto.fileName ||
           `fotografia-${Date.now()}.jpg`;
 
-        if (Platform.OS === 'web') {
-          const respuestaArchivo = await fetch(foto.uri);
-          const archivo = await respuestaArchivo.blob();
+        await adjuntarImagen(
+          formulario,
+          foto.uri,
+          nombre,
+          foto.mimeType || 'image/jpeg'
+        );
 
-          formulario.append(
-            'archivo',
-            archivo,
-            nombre
-          );
-        } else {
-          formulario.append(
-            'archivo',
-            {
-              uri: foto.uri,
-              name: nombre,
-              type: foto.mimeType || 'image/jpeg',
-            } as any
-          );
-        }
-
-        const respuesta = await fetch(
+        const respuesta = await enviarFormularioImagen(
           `${API_URL}/solicitudes/${solicitudId}/imagenes`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formulario,
-          }
+          formulario,
+          token
         );
 
         if (!respuesta.ok) {
@@ -2313,7 +2297,7 @@ export default function PanelCliente() {
         </View>
       </View>
 
-      <ScrollView
+      <FormularioDesplazable
         style={styles.contenido}
         contentContainerStyle={[
           styles.contenidoInterior,
@@ -2341,7 +2325,7 @@ export default function PanelCliente() {
             PozaSync · Servicios locales en Poza Rica
           </Text>
         </View>
-      </ScrollView>
+      </FormularioDesplazable>
 
       {!esEscritorio && (
         <View style={styles.navegacionInferior}>

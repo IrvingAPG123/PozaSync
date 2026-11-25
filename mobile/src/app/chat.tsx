@@ -1,3 +1,6 @@
+import { interpretarFechaUTC } from '../services/fechas';
+import FormularioDesplazable from '../components/FormularioDesplazable';
+import { adjuntarImagen, enviarFormularioImagen } from '../services/imagenes';
 import { obtenerToken } from '../services/tokenStorage';
 
 import React, {
@@ -183,13 +186,14 @@ async function leerError(
 function horaMensaje(fecha: string | null): string {
   if (!fecha) return '';
 
-  const valor = new Date(fecha);
+  const valor = interpretarFechaUTC(fecha);
 
-  if (Number.isNaN(valor.getTime())) return '';
+  if (!valor) return '';
 
   return valor.toLocaleTimeString('es-MX', {
     hour: '2-digit',
     minute: '2-digit',
+    hour12: true,
   });
 }
 
@@ -1152,44 +1156,12 @@ export default function Chat() {
 
     const formulario = new FormData();
 
-    if (Platform.OS === 'web') {
-      const respuestaArchivo = await fetch(
-        archivo.uri
-      );
-
-      if (!respuestaArchivo.ok) {
-        throw new Error(
-          'No se pudo leer la fotografía seleccionada.'
-        );
-      }
-
-      const blob =
-        await respuestaArchivo.blob();
-
-      if (blob.size > MAX_BYTES) {
-        throw new Error(
-          'La fotografía no puede superar los 5 MB.'
-        );
-      }
-
-      formulario.append(
-        'archivo',
-        blob,
-        obtenerNombreImagen(archivo, tipo)
-      );
-    } else {
-      formulario.append(
-        'archivo',
-        {
-          uri: archivo.uri,
-          name: obtenerNombreImagen(
-            archivo,
-            tipo
-          ),
-          type: tipo,
-        } as any
-      );
-    }
+    await adjuntarImagen(
+      formulario,
+      archivo.uri,
+      obtenerNombreImagen(archivo, tipo),
+      tipo
+    );
 
     formulario.append(
       'contenido',
@@ -1201,15 +1173,10 @@ export default function Chat() {
       encodeURIComponent(conversacionId) +
       '/imagenes';
 
-    const respuesta = await fetch(
+    const respuesta = await enviarFormularioImagen(
       rutaImagenes,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formulario,
-      }
+      formulario,
+      token
     );
 
     if (!respuesta.ok) {
@@ -1861,12 +1828,28 @@ export default function Chat() {
 
         {/* ACUERDO DE SERVICIO */}
 
-        {renderizarServicio()}
+        <FormularioDesplazable
+          style={
+            Platform.OS === 'web'
+              ? { flexGrow: 0, flexShrink: 1 }
+              : {
+                  flexGrow: 0,
+                  flexShrink: 1,
+                  maxHeight: '45%',
+                }
+          }
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+        >
+          {renderizarServicio()}
+        </FormularioDesplazable>
 
         {/* MENSAJES */}
 
         <ScrollView
           ref={scrollRef}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           style={styles.listaMensajes}
           contentContainerStyle={
             styles.contenidoMensajes
@@ -2107,6 +2090,11 @@ export default function Chat() {
             <TextInput
               value={texto}
               onChangeText={setTexto}
+              onFocus={() => {
+                scrollRef.current?.scrollToEnd({
+                  animated: true,
+                });
+              }}
               placeholder={
                 imagenSeleccionada
                   ? 'Añade un mensaje (opcional)...'
@@ -2287,6 +2275,7 @@ const styles = StyleSheet.create({
 
   listaMensajes: {
     flex: 1,
+    minHeight: 0,
   },
 
   contenidoMensajes: {
@@ -2480,6 +2469,7 @@ const styles = StyleSheet.create({
   },
 
   areaEscritura: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 6,
@@ -2688,7 +2678,7 @@ const styles = StyleSheet.create({
   },
 
   entradaResena: {
-    minHeight: 90,
+    minHeight: 80,
     maxHeight: 150,
     padding: 12,
     borderWidth: 1,

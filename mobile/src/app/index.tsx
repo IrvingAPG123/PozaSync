@@ -1,5 +1,6 @@
+import FormularioDesplazable from '../components/FormularioDesplazable';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -15,7 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { guardarToken, borrarToken } from '../services/tokenStorage';
+import { guardarToken, borrarToken, obtenerToken } from '../services/tokenStorage';
 
 const API_URL =
   Platform.OS === 'web'
@@ -56,10 +57,86 @@ export default function InicioSesion() {
   const [contrasena, setContrasena] = useState('');
   const [mostrarContrasena, setMostrarContrasena] =
     useState(false);
-  const [cargando, setCargando] = useState(false);
+  const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [necesitaVerificacion, setNecesitaVerificacion] =
     useState(false);
+
+  useEffect(() => {
+    let activo = true;
+
+    async function recuperarSesion() {
+      try {
+        let token = await obtenerToken();
+
+        if (!token || !activo) {
+          return;
+        }
+
+        async function consultarPerfil(acceso: string) {
+          return fetch(`${API_URL}/auth/yo`, {
+            headers: {
+              Authorization: `Bearer ${acceso}`,
+            },
+          });
+        }
+
+        let respuesta = await consultarPerfil(token);
+
+        if (respuesta.status === 401) {
+          token = await obtenerToken(true);
+
+          if (!token || !activo) {
+            return;
+          }
+
+          respuesta = await consultarPerfil(token);
+        }
+
+        if (respuesta.status === 401 ||
+            respuesta.status === 403) {
+          await borrarToken();
+          return;
+        }
+
+        if (!respuesta.ok) {
+          throw new Error(
+            'No se pudo recuperar tu sesión.'
+          );
+        }
+
+        const usuario: Usuario = await respuesta.json();
+
+        if (!activo) {
+          return;
+        }
+
+        if (usuario.rol === 'cliente') {
+          router.replace('/panel-cliente');
+        } else if (usuario.rol === 'tecnico') {
+          router.replace('/panel-tecnico');
+        } else {
+          await borrarToken();
+        }
+      } catch {
+        if (activo) {
+          setError(
+            'No se pudo recuperar la sesión. Comprueba tu conexión.'
+          );
+        }
+      } finally {
+        if (activo) {
+          setCargando(false);
+        }
+      }
+    }
+
+    void recuperarSesion();
+
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   function limpiarError() {
     setError('');
@@ -223,7 +300,7 @@ export default function InicioSesion() {
       // CLIENTE
       if (perfil.rol === 'cliente') {
         try {
-          await guardarToken(token);
+          await guardarToken(token, datos.refresh_token);
         } catch {
           throw new Error('No se pudo guardar la sesión de forma segura.');
         }
@@ -239,7 +316,7 @@ export default function InicioSesion() {
 
       if (perfil.rol === 'tecnico') {
         try {
-          await guardarToken(token);
+          await guardarToken(token, datos.refresh_token);
         } catch {
           throw new Error('No se pudo guardar la sesión de forma segura.');
         }
@@ -279,15 +356,11 @@ export default function InicioSesion() {
   return (
     <KeyboardAvoidingView
       style={styles.pantalla}
-      behavior={
-        Platform.OS === 'ios'
-          ? 'padding'
-          : undefined
-      }
+      enabled={false}
     >
       <StatusBar style="dark" />
 
-      <ScrollView
+      <FormularioDesplazable
         contentContainerStyle={styles.contenedor}
         keyboardShouldPersistTaps="handled"
       >
@@ -512,7 +585,7 @@ export default function InicioSesion() {
           </View>
 
         </View>
-      </ScrollView>
+      </FormularioDesplazable>
     </KeyboardAvoidingView>
   );
 }

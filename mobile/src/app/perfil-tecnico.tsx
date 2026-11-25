@@ -1,3 +1,4 @@
+import FormularioDesplazable from '../components/FormularioDesplazable';
 import { obtenerToken } from '../services/tokenStorage';
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -299,7 +300,7 @@ export default function PerfilTecnico() {
   }
 
   return (
-    <ScrollView
+    <FormularioDesplazable
       style={styles.pantalla}
       contentContainerStyle={styles.contenido}
     >
@@ -507,7 +508,7 @@ export default function PerfilTecnico() {
               : 'Crear perfil profesional'}
         </Text>
       </Pressable>
-    </ScrollView>
+    </FormularioDesplazable>
   );
 }
 

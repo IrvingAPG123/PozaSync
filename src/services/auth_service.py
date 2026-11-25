@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from pwdlib import PasswordHash
 from jwt.exceptions import InvalidTokenError
 
-from src.database import usuarios
+from src.database import usuarios, db
 
 
 # ==========================================
@@ -90,6 +90,7 @@ def obtener_version_token(usuario_id: str) -> int:
 def crear_token(
     usuario_id: str,
     version_token: int | None = None,
+    sesion_id: str | None = None,
 ) -> str:
 
     if version_token is None:
@@ -110,6 +111,11 @@ def crear_token(
         ),
         "version_token": version_token,
     }
+
+    if sesion_id is not None:
+        if not ObjectId.is_valid(sesion_id):
+            raise ValueError("Sesion invalida.")
+        datos["sid"] = sesion_id
 
     return jwt.encode(
         datos,
@@ -181,6 +187,30 @@ def verificar_token(token: str) -> str | None:
             or version_token != version_actual
         ):
             return None
+
+        sesion_id = datos.get("sid")
+
+        if "sid" in datos:
+            if (
+                not isinstance(sesion_id, str)
+                or not ObjectId.is_valid(sesion_id)
+            ):
+                return None
+
+            sesion = db["sesiones_moviles"].find_one(
+                {
+                    "_id": ObjectId(sesion_id),
+                    "usuario_id": ObjectId(usuario_id),
+                    "version_token": version_token,
+                    "fecha_expiracion": {
+                        "$gt": datetime.now(timezone.utc)
+                    },
+                },
+                {"_id": 1},
+            )
+
+            if sesion is None:
+                return None
 
         return usuario_id
 

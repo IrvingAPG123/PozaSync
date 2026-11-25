@@ -1,4 +1,11 @@
 
+from fastapi import Request
+from src.services.sesiones_service import (
+    crear_sesion_movil,
+    renovar_sesion_movil,
+    cerrar_sesion_movil,
+)
+
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
@@ -371,9 +378,15 @@ def reenviar_codigo(datos: ReenviarCodigo):
     return respuesta
 
 
+
+
+class TokenSesionMovil(TokenRespuesta):
+    refresh_token: str
+
+
 @router.post(
     "/login",
-    response_model=TokenRespuesta,
+    response_model=TokenSesionMovil,
 )
 def iniciar_sesion(datos: UsuarioLogin):
     correo = str(datos.correo).strip().lower()
@@ -422,15 +435,7 @@ def iniciar_sesion(datos: UsuarioLogin):
             ),
         )
 
-    token = crear_token(
-        str(usuario["_id"]),
-        version_token=usuario.get("version_token", 0),
-    )
-
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-    }
+    return crear_sesion_movil(usuario)
 
 
 @router.get(
@@ -481,3 +486,54 @@ def obtener_mi_perfil(
         )
 
     return respuesta_usuario(usuario)
+
+
+
+# ==========================================
+# RENOVACION DE SESIONES MOVILES
+# ==========================================
+
+async def leer_token_renovacion(request: Request):
+    try:
+        datos = await request.json()
+    except (ValueError, UnicodeError):
+        raise HTTPException(
+            status_code=422,
+            detail="Solicitud de sesión inválida.",
+        ) from None
+
+    if not isinstance(datos, dict):
+        raise HTTPException(
+            status_code=422,
+            detail="Solicitud de sesión inválida.",
+        )
+
+    token = datos.get("refresh_token")
+
+    if (
+        not isinstance(token, str)
+        or not 32 <= len(token) <= 256
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Sesión inválida.",
+        )
+
+    return token
+
+
+@router.post(
+    "/renovar",
+    response_model=TokenSesionMovil,
+)
+def renovar_sesion(
+    token: str = Depends(leer_token_renovacion),
+):
+    return renovar_sesion_movil(token)
+
+
+@router.post("/logout")
+def cerrar_sesion(
+    token: str = Depends(leer_token_renovacion),
+):
+    return cerrar_sesion_movil(token)

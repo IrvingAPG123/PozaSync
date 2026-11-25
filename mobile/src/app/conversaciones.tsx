@@ -1,3 +1,4 @@
+import { interpretarFechaUTC } from '../services/fechas';
 import { obtenerToken } from '../services/tokenStorage';
 
 import React, {
@@ -79,9 +80,9 @@ function formatearFecha(
     return '';
   }
 
-  const valor = new Date(fecha);
+  const valor = interpretarFechaUTC(fecha);
 
-  if (Number.isNaN(valor.getTime())) {
+  if (!valor) {
     return '';
   }
 

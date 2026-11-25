@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "517299498818",
+    "project_id": "pozasync-63f05",
+    "storage_bucket": "pozasync-63f05.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:517299498818:android:767a307e42d03242a9a2db",
+        "android_client_info": {
+          "package_name": "com.pozazync.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHFKcaPNHsSWjeIsgVfwHetxanlLd3tR4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

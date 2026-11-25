@@ -227,7 +227,10 @@ def obtener_conversacion_autorizada(
 
 def formatear_fecha(fecha):
     if isinstance(fecha, datetime):
-        return fecha.isoformat()
+        if fecha.tzinfo is None:
+            fecha = fecha.replace(tzinfo=timezone.utc)
+
+        return fecha.astimezone(timezone.utc).isoformat()
 
     return None
 

@@ -1,3 +1,4 @@
+import FormularioDesplazable from '../components/FormularioDesplazable';
 
 import React, { useState } from 'react';
 import {
@@ -539,11 +540,11 @@ export default function RegistroScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.pagina}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      enabled={false}
     >
       <StatusBar style="dark" />
 
-      <ScrollView
+      <FormularioDesplazable
         contentContainerStyle={styles.contenedor}
         keyboardShouldPersistTaps="handled"
       >
@@ -1262,7 +1263,7 @@ export default function RegistroScreen() {
             </Pressable>
           </View>
         </View>
-      </ScrollView>
+      </FormularioDesplazable>
     </KeyboardAvoidingView>
   );
 }

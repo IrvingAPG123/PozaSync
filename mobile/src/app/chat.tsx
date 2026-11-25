@@ -1,5 +1,4 @@
 import { interpretarFechaUTC } from '../services/fechas';
-import FormularioDesplazable from '../components/FormularioDesplazable';
 import { adjuntarImagen, enviarFormularioImagen } from '../services/imagenes';
 import { obtenerToken } from '../services/tokenStorage';
 
@@ -1826,24 +1825,6 @@ export default function Chat() {
           </Pressable>
         </View>
 
-        {/* ACUERDO DE SERVICIO */}
-
-        <FormularioDesplazable
-          style={
-            Platform.OS === 'web'
-              ? { flexGrow: 0, flexShrink: 1 }
-              : {
-                  flexGrow: 0,
-                  flexShrink: 1,
-                  maxHeight: '45%',
-                }
-          }
-          nestedScrollEnabled
-          showsVerticalScrollIndicator
-        >
-          {renderizarServicio()}
-        </FormularioDesplazable>
-
         {/* MENSAJES */}
 
         <ScrollView
@@ -1860,6 +1841,8 @@ export default function Chat() {
             });
           }}
         >
+          {renderizarServicio()}
+
           {mensajes.length === 0 ? (
             <View style={styles.sinMensajes}>
               <Ionicons
@@ -2567,8 +2550,8 @@ const styles = StyleSheet.create({
 
   tarjetaServicio: {
     padding: 14,
-    margin: 12,
-    marginBottom: 0,
+    margin: 0,
+    marginBottom: 8,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: C.borde,

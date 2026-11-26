@@ -1,12 +1,13 @@
+import { API_URL, ADMIN_URL } from '../config/api';
 import FormularioDesplazable from '../components/FormularioDesplazable';
 
 import React, { useState, useEffect } from 'react';
+
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,30 +17,45 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { guardarToken, borrarToken, obtenerToken } from '../services/tokenStorage';
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://127.0.0.1:8001'
-    : process.env.EXPO_PUBLIC_API_URL ||
-      'http://127.0.0.1:8001';
+import {
+  guardarToken,
+  borrarToken,
+  obtenerToken,
+} from '../services/tokenStorage';
+
+
+// ==========================================
+// CONFIGURACION
+// ==========================================
+
+
+
 
 
 type Usuario = {
   id: string;
   nombre: string;
   correo: string;
-  rol: 'cliente' | 'tecnico' | 'admin';
+  rol: 'cliente' | 'tecnico' | 'administrador';
 };
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const EMAIL_REGEX =
+  /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+
+// ==========================================
+// FUNCIONES AUXILIARES
+// ==========================================
 
 function obtenerDetalle(detail: unknown): string {
+
   if (typeof detail === 'string') {
     return detail;
   }
 
   if (Array.isArray(detail)) {
+
     return detail
       .map((item: any) =>
         typeof item?.msg === 'string'
@@ -52,21 +68,84 @@ function obtenerDetalle(detail: unknown): string {
   return '';
 }
 
+
+// ==========================================
+// REDIRECCION ADMINISTRATIVA
+// ==========================================
+
+function abrirPanelAdministrativo(codigo: string) {
+
+  if (Platform.OS !== 'web') {
+
+    throw new Error(
+      'El acceso administrativo solo está disponible en la aplicación web.'
+    );
+  }
+
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(codigo)) {
+
+    throw new Error(
+      'No se recibió un código de acceso válido.'
+    );
+  }
+
+  const destino = new URL(ADMIN_URL);
+
+  const esLocal =
+    destino.hostname === 'localhost' ||
+    destino.hostname === '127.0.0.1';
+
+  if (
+    destino.protocol !== 'https:' &&
+    !(esLocal && destino.protocol === 'http:')
+  ) {
+
+    throw new Error(
+      'La dirección del panel administrativo no es segura.'
+    );
+  }
+
+  destino.hash = new URLSearchParams({
+    codigo_acceso: codigo,
+  }).toString();
+
+  window.location.replace(destino.toString());
+}
+
+
+// ==========================================
+// INICIO DE SESION
+// ==========================================
+
 export default function InicioSesion() {
+
   const [correo, setCorreo] = useState('');
+
   const [contrasena, setContrasena] = useState('');
+
   const [mostrarContrasena, setMostrarContrasena] =
     useState(false);
+
   const [cargando, setCargando] = useState(true);
+
   const [error, setError] = useState('');
+
   const [necesitaVerificacion, setNecesitaVerificacion] =
     useState(false);
 
+
+  // ========================================
+  // RECUPERAR SESION EXISTENTE
+  // ========================================
+
   useEffect(() => {
+
     let activo = true;
 
     async function recuperarSesion() {
+
       try {
+
         let token = await obtenerToken();
 
         if (!token || !activo) {
@@ -74,16 +153,20 @@ export default function InicioSesion() {
         }
 
         async function consultarPerfil(acceso: string) {
+
           return fetch(`${API_URL}/auth/yo`, {
+
             headers: {
               Authorization: `Bearer ${acceso}`,
             },
+
           });
         }
 
         let respuesta = await consultarPerfil(token);
 
         if (respuesta.status === 401) {
+
           token = await obtenerToken(true);
 
           if (!token || !activo) {
@@ -93,38 +176,54 @@ export default function InicioSesion() {
           respuesta = await consultarPerfil(token);
         }
 
-        if (respuesta.status === 401 ||
-            respuesta.status === 403) {
+        if (
+          respuesta.status === 401 ||
+          respuesta.status === 403
+        ) {
+
           await borrarToken();
+
           return;
         }
 
         if (!respuesta.ok) {
+
           throw new Error(
             'No se pudo recuperar tu sesión.'
           );
         }
 
-        const usuario: Usuario = await respuesta.json();
+        const usuario: Usuario =
+          await respuesta.json();
 
         if (!activo) {
           return;
         }
 
         if (usuario.rol === 'cliente') {
+
           router.replace('/panel-cliente');
+
         } else if (usuario.rol === 'tecnico') {
+
           router.replace('/panel-tecnico');
+
         } else {
+
           await borrarToken();
         }
+
       } catch {
+
         if (activo) {
+
           setError(
             'No se pudo recuperar la sesión. Comprueba tu conexión.'
           );
         }
+
       } finally {
+
         if (activo) {
           setCargando(false);
         }
@@ -136,65 +235,112 @@ export default function InicioSesion() {
     return () => {
       activo = false;
     };
+
   }, []);
 
+
+  // ========================================
+  // LIMPIAR MENSAJES
+  // ========================================
+
   function limpiarError() {
+
     setError('');
+
     setNecesitaVerificacion(false);
   }
 
+
+  // ========================================
+  // VERIFICACION DE CORREO
+  // ========================================
+
   function irAVerificarCorreo() {
+
     router.push({
+
       pathname: '/verificar-correo',
+
       params: {
         correo: correo.trim().toLowerCase(),
       },
+
     });
   }
 
+
+  // ========================================
+  // AUTENTICACION UNIFICADA
+  // ========================================
+
   async function iniciarSesion() {
+
     if (cargando) {
       return;
     }
 
     const email = correo.trim().toLowerCase();
+
     limpiarError();
 
     if (!email || !contrasena) {
+
       setError(
         'Ingresa tu correo electrónico y contraseña.'
       );
+
       return;
     }
 
     if (!EMAIL_REGEX.test(email)) {
+
       setError(
         'Ingresa una dirección de correo válida.'
       );
+
       return;
     }
 
     if (contrasena.length < 8) {
+
       setError(
         'La contraseña debe tener al menos 8 caracteres.'
       );
+
       return;
     }
 
     setCargando(true);
 
+    let redirigiendo = false;
+
     try {
-      // ======================================
-      // 1. VALIDAR CREDENCIALES EN FASTAPI
-      // ======================================
+
+      // ====================================
+      // 1. SELECCIONAR ENDPOINT
+      // ====================================
+
+      const endpoint =
+        Platform.OS === 'web'
+          ? '/auth/login-web'
+          : '/auth/login';
+
+
+      // ====================================
+      // 2. VALIDAR CREDENCIALES
+      // ====================================
 
       const respuesta = await fetch(
-        `${API_URL}/auth/login`,
+
+        `${API_URL}${endpoint}`,
+
         {
           method: 'POST',
+
           headers: {
             'Content-Type': 'application/json',
           },
+
           body: JSON.stringify({
             correo: email,
             contrasena,
@@ -205,28 +351,41 @@ export default function InicioSesion() {
       let datos: any = null;
 
       try {
+
         datos = await respuesta.json();
+
       } catch {
+
         throw new Error(
           'El servidor devolvió una respuesta inválida.'
         );
       }
 
+
+      // ====================================
+      // 3. CONTROL DE ERRORES
+      // ====================================
+
       if (!respuesta.ok) {
-        const detalle = obtenerDetalle(datos?.detail);
+
+        const detalle =
+          obtenerDetalle(datos?.detail);
 
         if (respuesta.status === 401) {
+
           throw new Error(
             'Correo o contraseña incorrectos.'
           );
         }
 
         if (respuesta.status === 403) {
+
           const mensaje =
             detalle ||
             'No se pudo iniciar sesión con esta cuenta.';
 
           if (/verific|confirm/i.test(mensaje)) {
+
             setNecesitaVerificacion(true);
           }
 
@@ -234,6 +393,7 @@ export default function InicioSesion() {
         }
 
         if (respuesta.status === 422) {
+
           throw new Error(
             detalle || 'Revisa los datos ingresados.'
           );
@@ -241,19 +401,52 @@ export default function InicioSesion() {
 
         throw new Error(
           detalle ||
-            'No se pudo iniciar sesión. Inténtalo nuevamente.'
+          'No se pudo iniciar sesión. Inténtalo nuevamente.'
         );
       }
 
-      // ======================================
-      // 2. COMPROBAR TOKEN JWT
-      // ======================================
+
+      // ====================================
+      // 4. ACCESO ADMINISTRATIVO WEB
+      // ====================================
+
+      if (
+        Platform.OS === 'web' &&
+        datos?.rol === 'administrador'
+      ) {
+
+        const codigo = datos.codigo_acceso;
+
+        if (
+          typeof codigo !== 'string' ||
+          !codigo
+        ) {
+
+          throw new Error(
+            'No se recibió el acceso administrativo.'
+          );
+        }
+
+        setContrasena('');
+
+        abrirPanelAdministrativo(codigo);
+
+        redirigiendo = true;
+
+        return;
+      }
+
+
+      // ====================================
+      // 5. VALIDAR SESION DE USUARIO
+      // ====================================
 
       if (
         !datos ||
         typeof datos.access_token !== 'string' ||
         !datos.access_token
       ) {
+
         throw new Error(
           'No se recibió una sesión válida.'
         );
@@ -261,12 +454,15 @@ export default function InicioSesion() {
 
       const token = datos.access_token;
 
-      // ======================================
-      // 3. CONSULTAR PERFIL AUTENTICADO
-      // ======================================
+
+      // ====================================
+      // 6. CONSULTAR PERFIL AUTENTICADO
+      // ====================================
 
       const respuestaUsuario = await fetch(
+
         `${API_URL}/auth/yo`,
+
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -275,6 +471,7 @@ export default function InicioSesion() {
       );
 
       if (!respuestaUsuario.ok) {
+
         throw new Error(
           'No se pudo cargar tu perfil.'
         );
@@ -288,99 +485,146 @@ export default function InicioSesion() {
         typeof perfil.nombre !== 'string' ||
         typeof perfil.correo !== 'string'
       ) {
+
         throw new Error(
           'El servidor devolvió un perfil inválido.'
         );
       }
 
-      // ======================================
-      // 4. REDIRIGIR SEGÚN EL ROL
-      // ======================================
+      if (
+        Platform.OS === 'web' &&
+        datos.rol !== perfil.rol
+      ) {
 
-      // CLIENTE
+        throw new Error(
+          'El rol de la sesión no coincide con el perfil.'
+        );
+      }
+
+
+      // ====================================
+      // 7. ACCESO CLIENTE
+      // ====================================
+
       if (perfil.rol === 'cliente') {
+
         try {
-          await guardarToken(token, datos.refresh_token);
+
+          await guardarToken(
+            token,
+            datos.refresh_token
+          );
+
         } catch {
-          throw new Error('No se pudo guardar la sesión de forma segura.');
+
+          throw new Error(
+            'No se pudo guardar la sesión de forma segura.'
+          );
         }
 
         setContrasena('');
+
         router.replace('/panel-cliente');
+
         return;
       }
 
-      // ======================================
-      // TÉCNICO - NUEVA REDIRECCIÓN
-      // ======================================
+
+      // ====================================
+      // 8. ACCESO TECNICO
+      // ====================================
 
       if (perfil.rol === 'tecnico') {
+
         try {
-          await guardarToken(token, datos.refresh_token);
+
+          await guardarToken(
+            token,
+            datos.refresh_token
+          );
+
         } catch {
-          throw new Error('No se pudo guardar la sesión de forma segura.');
+
+          throw new Error(
+            'No se pudo guardar la sesión de forma segura.'
+          );
         }
 
         setContrasena('');
+
         router.replace('/panel-tecnico');
-        return;
-      }
 
-      // ADMINISTRADOR
-      if (perfil.rol === 'admin') {
-        await borrarToken();
-        setContrasena('');
-
-        setError(
-          'Inicio de sesión correcto. El panel de administración todavía está en desarrollo.'
-        );
         return;
       }
 
       throw new Error(
         'El tipo de cuenta no es válido.'
       );
+
     } catch (e) {
+
       setError(
+
         e instanceof TypeError
+
           ? 'No hay conexión con el servidor. Comprueba que FastAPI esté encendido.'
+
           : e instanceof Error
+
             ? e.message
+
             : 'Ocurrió un error inesperado.'
       );
+
     } finally {
-      setCargando(false);
+
+      if (!redirigiendo) {
+        setCargando(false);
+      }
     }
   }
 
+
+  // ========================================
+  // INTERFAZ
+  // ========================================
+
   return (
+
     <KeyboardAvoidingView
       style={styles.pantalla}
       enabled={false}
     >
+
       <StatusBar style="dark" />
 
       <FormularioDesplazable
         contentContainerStyle={styles.contenedor}
         keyboardShouldPersistTaps="handled"
       >
+
         <View style={styles.tarjeta}>
 
           {/* MARCA POZASYNC */}
 
           <View style={styles.marca}>
+
             <View style={styles.iconoMarca}>
+
               <Ionicons
                 name="construct-outline"
                 size={23}
                 color="#FFFFFF"
               />
+
             </View>
 
             <Text style={styles.nombreMarca}>
               PozaSync
             </Text>
+
           </View>
+
 
           {/* BIENVENIDA */}
 
@@ -393,6 +637,7 @@ export default function InicioSesion() {
             profesionales o administrar tus servicios.
           </Text>
 
+
           {/* FORMULARIO */}
 
           <View style={styles.formulario}>
@@ -402,6 +647,7 @@ export default function InicioSesion() {
             </Text>
 
             <View style={styles.campo}>
+
               <Ionicons
                 name="mail-outline"
                 size={19}
@@ -414,7 +660,9 @@ export default function InicioSesion() {
                 placeholderTextColor="#94A3B8"
                 value={correo}
                 onChangeText={(texto) => {
+
                   setCorreo(texto);
+
                   limpiarError();
                 }}
                 keyboardType="email-address"
@@ -425,6 +673,7 @@ export default function InicioSesion() {
                 editable={!cargando}
                 accessibilityLabel="Correo electrónico"
               />
+
             </View>
 
             <Text style={styles.etiqueta}>
@@ -432,6 +681,7 @@ export default function InicioSesion() {
             </Text>
 
             <View style={styles.campo}>
+
               <Ionicons
                 name="lock-closed-outline"
                 size={19}
@@ -444,7 +694,9 @@ export default function InicioSesion() {
                 placeholderTextColor="#94A3B8"
                 value={contrasena}
                 onChangeText={(texto) => {
+
                   setContrasena(texto);
+
                   limpiarError();
                 }}
                 secureTextEntry={!mostrarContrasena}
@@ -470,6 +722,7 @@ export default function InicioSesion() {
                     : 'Mostrar contraseña'
                 }
               >
+
                 <Ionicons
                   name={
                     mostrarContrasena
@@ -479,13 +732,18 @@ export default function InicioSesion() {
                   size={20}
                   color="#64748B"
                 />
+
               </Pressable>
+
             </View>
+
 
             {/* MENSAJES DE ERROR */}
 
             {error ? (
+
               <View style={styles.error}>
+
                 <Ionicons
                   name="alert-circle-outline"
                   size={19}
@@ -495,18 +753,23 @@ export default function InicioSesion() {
                 <Text style={styles.textoError}>
                   {error}
                 </Text>
+
               </View>
+
             ) : null}
 
-            {/* VERIFICACIÓN DE CORREO */}
+
+            {/* VERIFICACION DE CORREO */}
 
             {necesitaVerificacion ? (
+
               <Pressable
                 style={styles.botonVerificar}
                 onPress={irAVerificarCorreo}
                 disabled={cargando}
                 accessibilityRole="button"
               >
+
                 <Ionicons
                   name="mail-unread-outline"
                   size={20}
@@ -516,10 +779,13 @@ export default function InicioSesion() {
                 <Text style={styles.textoBotonVerificar}>
                   Verificar mi correo con PIN
                 </Text>
+
               </Pressable>
+
             ) : null}
 
-            {/* BOTÓN INICIAR SESIÓN */}
+
+            {/* BOTON INICIAR SESION */}
 
             <Pressable
               style={[
@@ -530,12 +796,17 @@ export default function InicioSesion() {
               disabled={cargando}
               accessibilityRole="button"
             >
+
               {cargando ? (
+
                 <ActivityIndicator
                   color="#FFFFFF"
                 />
+
               ) : (
+
                 <>
+
                   <Text style={styles.textoBoton}>
                     Iniciar sesión
                   </Text>
@@ -545,14 +816,20 @@ export default function InicioSesion() {
                     size={19}
                     color="#FFFFFF"
                   />
+
                 </>
+
               )}
+
             </Pressable>
+
           </View>
+
 
           {/* REGISTRO */}
 
           <View style={styles.registro}>
+
             <Text style={styles.textoSecundario}>
               ¿Aún no tienes una cuenta?
             </Text>
@@ -563,15 +840,20 @@ export default function InicioSesion() {
               }
               accessibilityRole="link"
             >
+
               <Text style={styles.enlace}>
                 Crear cuenta
               </Text>
+
             </Pressable>
+
           </View>
+
 
           {/* PIE */}
 
           <View style={styles.pie}>
+
             <Ionicons
               name="shield-checkmark-outline"
               size={16}
@@ -582,15 +864,24 @@ export default function InicioSesion() {
               Una forma más sencilla de conectar
               con profesionales en Poza Rica.
             </Text>
+
           </View>
 
         </View>
+
       </FormularioDesplazable>
+
     </KeyboardAvoidingView>
   );
 }
 
+
+// ==========================================
+// ESTILOS
+// ==========================================
+
 const styles = StyleSheet.create({
+
   pantalla: {
     flex: 1,
     backgroundColor: '#F4F6F9',
@@ -781,4 +1072,5 @@ const styles = StyleSheet.create({
     color: '#66758A',
     textAlign: 'center',
   },
+
 });

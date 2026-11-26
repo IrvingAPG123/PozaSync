@@ -22,7 +22,7 @@ import {
   LogOut,
   Menu,
   X,
-  Construction,
+  LoaderCircle,
 } from 'lucide-react'
 
 import Login from './pages/Login'
@@ -36,13 +36,19 @@ import Estadisticas from './pages/Estadisticas'
 import Reportes from './pages/Reportes'
 import Configuracion from './pages/Configuracion'
 
-import {
+import api, {
+  guardarToken,
   eliminarToken,
 } from './services/api'
 
 import type {
   Administrador,
 } from './types/admin'
+
+
+// ==========================================
+// NAVEGACION ADMINISTRATIVA
+// ==========================================
 
 const navegacion = [
   {
@@ -92,44 +98,142 @@ const navegacion = [
   },
 ]
 
-function ModuloPendiente({
-  titulo,
-}: {
-  titulo: string
-}) {
-  return (
-    <div className="page-content">
 
-      <div className="page-heading">
-        <h1>{titulo}</h1>
-      </div>
+// ==========================================
+// RECIBIR CODIGO TEMPORAL
+// ==========================================
 
-      <article className="panel loading-state">
-        <Construction size={42} />
+function obtenerCodigoInicial(): string | null {
 
-        <h2>Módulo en desarrollo</h2>
-
-        <p className="muted">
-          Esta sección se habilitará en una
-          próxima etapa del proyecto.
-        </p>
-      </article>
-
-    </div>
+  const parametros = new URLSearchParams(
+    window.location.hash.slice(1),
   )
+
+  const codigo = parametros.get('codigo_acceso')
+
+  if (codigo !== null) {
+
+    window.history.replaceState(
+      window.history.state,
+      '',
+      window.location.pathname +
+        window.location.search,
+    )
+  }
+
+  return codigo
 }
 
+const codigoInicial = obtenerCodigoInicial()
+
+
+// ==========================================
+// CANJEAR SESION ADMINISTRATIVA
+// ==========================================
+
+async function canjearAcceso(
+  codigo: string,
+): Promise<Administrador> {
+
+  eliminarToken()
+
+  try {
+
+    if (!/^[A-Za-z0-9_-]{32,128}$/.test(codigo)) {
+      throw new Error('Código de acceso inválido.')
+    }
+
+    const respuesta = await api.post(
+      '/admin/canjear-acceso',
+      {
+        codigo,
+      },
+    )
+
+    const token = respuesta.data.access_token
+
+    if (
+      typeof token !== 'string' ||
+      !token
+    ) {
+      throw new Error('Sesión administrativa inválida.')
+    }
+
+    guardarToken(token)
+
+    const perfil = await api.get<Administrador>(
+      '/admin/yo',
+    )
+
+    if (
+      perfil.data.rol !== 'administrador' ||
+      perfil.data.activo !== true
+    ) {
+      throw new Error('Acceso no autorizado.')
+    }
+
+    return perfil.data
+
+  } catch (error) {
+
+    eliminarToken()
+
+    throw error
+  }
+}
+
+
+// Evita canjear dos veces el mismo código
+// durante la ejecución de React StrictMode.
+
+let solicitudAcceso:
+  Promise<Administrador> | null = null
+
+function recuperarAcceso(
+  codigo: string,
+): Promise<Administrador> {
+
+  if (!solicitudAcceso) {
+
+    solicitudAcceso = canjearAcceso(codigo)
+  }
+
+  return solicitudAcceso
+}
+
+
+// ==========================================
+// APLICACION ADMINISTRATIVA
+// ==========================================
+
 function App() {
+
   const [administrador, setAdministrador] =
     useState<Administrador | null>(null)
 
   const [menuAbierto, setMenuAbierto] =
     useState(false)
 
+  const [cargandoAcceso, setCargandoAcceso] =
+    useState(codigoInicial !== null)
+
+  const [errorAcceso, setErrorAcceso] =
+    useState('')
+
+
+  // ========================================
+  // CONTROL DE SESIONES EXPIRADAS
+  // ========================================
+
   useEffect(() => {
+
     function cerrarSesionExpirada() {
+
       eliminarToken()
+
       setAdministrador(null)
+
+      setMenuAbierto(false)
     }
 
     window.addEventListener(
@@ -138,67 +242,229 @@ function App() {
     )
 
     return () => {
+
       window.removeEventListener(
         'sesion-expirada',
         cerrarSesionExpirada,
       )
     }
+
   }, [])
 
+
+  // ========================================
+  // RECUPERAR ACCESO DESDE POZASYNC WEB
+  // ========================================
+
+  useEffect(() => {
+
+    let activo = true
+
+    async function iniciarAcceso() {
+
+      if (codigoInicial === null) {
+        return
+      }
+
+      try {
+
+        const perfil = await recuperarAcceso(
+          codigoInicial,
+        )
+
+        if (activo) {
+
+          setAdministrador(perfil)
+
+          setErrorAcceso('')
+        }
+
+      } catch {
+
+        if (activo) {
+
+          setAdministrador(null)
+
+          setErrorAcceso(
+            'No fue posible recuperar el acceso. ' +
+            'Inicia sesión nuevamente.',
+          )
+        }
+
+      } finally {
+
+        if (activo) {
+          setCargandoAcceso(false)
+        }
+      }
+    }
+
+    void iniciarAcceso()
+
+    return () => {
+      activo = false
+    }
+
+  }, [])
+
+
+  // ========================================
+  // CERRAR SESION
+  // ========================================
+
   function cerrarSesion() {
+
     eliminarToken()
+
     setAdministrador(null)
+
     setMenuAbierto(false)
+
+    setErrorAcceso('')
   }
 
-  if (!administrador) {
+
+  // ========================================
+  // PANTALLA DE CARGA
+  // ========================================
+
+  if (cargandoAcceso) {
+
     return (
-      <Login
-        alIniciarSesion={setAdministrador}
-      />
+
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 16,
+          backgroundColor: '#F4F6F9',
+          color: '#1D4ED8',
+          padding: 24,
+          textAlign: 'center',
+        }}
+      >
+
+        <ShieldCheck size={48} />
+
+        <h2>PozaSync</h2>
+
+        <LoaderCircle
+          size={30}
+          className="spin"
+        />
+
+        <p>
+          Verificando acceso administrativo...
+        </p>
+
+      </div>
     )
   }
 
+
+  // ========================================
+  // ACCESO NO AUTENTICADO
+  // ========================================
+
+  if (!administrador) {
+
+    return (
+
+      <>
+
+        {errorAcceso && (
+
+          <div
+            role="alert"
+            style={{
+              padding: 16,
+              textAlign: 'center',
+              backgroundColor: '#FEF3F2',
+              color: '#B42318',
+            }}
+          >
+
+            {errorAcceso}
+
+          </div>
+
+        )}
+
+        <Login
+          alIniciarSesion={(perfil) => {
+
+            setErrorAcceso('')
+
+            setAdministrador(perfil)
+          }}
+        />
+
+      </>
+    )
+  }
+
+
+  // ========================================
+  // PANEL ADMINISTRATIVO
+  // ========================================
+
   return (
+
     <BrowserRouter>
 
       <div className="admin-layout">
 
         {menuAbierto && (
+
           <button
             className="mobile-overlay"
             aria-label="Cerrar menú"
             onClick={() => setMenuAbierto(false)}
           />
+
         )}
 
-        <aside className={
-          `sidebar ${menuAbierto ? 'open' : ''}`
-        }>
+        <aside
+          className={
+            `sidebar ${menuAbierto ? 'open' : ''}`
+          }
+        >
 
           <div className="brand">
 
             <div className="brand-icon">
+
               <ShieldCheck size={27} />
+
             </div>
 
             <div>
+
               <strong>PozaSync</strong>
+
               <span>ADMIN PANEL</span>
+
             </div>
 
           </div>
 
           <div className="navigation-label">
+
             GENERAL
+
           </div>
 
           <nav className="navigation">
 
             {navegacion.map((item) => {
+
               const Icono = item.icono
 
               return (
+
                 <NavLink
                   key={item.ruta}
                   to={item.ruta}
@@ -207,11 +473,16 @@ function App() {
                     setMenuAbierto(false)
                   }
                   className={({ isActive }) =>
-                    `nav-link ${isActive ? 'selected' : ''}`
+                    `nav-link ${
+                      isActive ? 'selected' : ''
+                    }`
                   }
                 >
+
                   <Icono size={19} />
+
                   {item.nombre}
+
                 </NavLink>
               )
             })}
@@ -224,8 +495,11 @@ function App() {
               className="logout-button"
               onClick={cerrarSesion}
             >
+
               <LogOut size={19} />
+
               Cerrar sesión
+
             </button>
 
             <small>PozaSync Admin · v1.0</small>
@@ -247,7 +521,9 @@ function App() {
                   setMenuAbierto(!menuAbierto)
                 }
               >
+
                 {menuAbierto ? <X /> : <Menu />}
+
               </button>
 
               <span>Panel administrativo</span>
@@ -257,15 +533,19 @@ function App() {
             <div className="admin-profile">
 
               <div className="profile-text">
+
                 <strong>
                   {administrador.nombre}
                 </strong>
 
                 <small>Administrador</small>
+
               </div>
 
               <div className="avatar admin-avatar">
+
                 <ShieldCheck size={22} />
+
               </div>
 
             </div>
@@ -308,15 +588,15 @@ function App() {
             />
 
             <Route
-                path="/resenas"
-                element={
-                  <div className="page-content">
-                    <Resenas />
-                  </div>
-                }
-              />
+              path="/resenas"
+              element={
+                <div className="page-content">
+                  <Resenas />
+                </div>
+              }
+            />
 
-              <Route
+            <Route
               path="/estadisticas"
               element={
                 <div className="page-content">
@@ -326,34 +606,22 @@ function App() {
             />
 
             <Route
-                  path="/reportes"
-                  element={
-                    <div className="page-content">
-                      <Reportes />
-                    </div>
-                  }
-                />
+              path="/reportes"
+              element={
+                <div className="page-content">
+                  <Reportes />
+                </div>
+              }
+            />
 
-                <Route
-                path="/configuracion"
-                element={
-                  <div className="page-content">
-                    <Configuracion />
-                  </div>
-                }
-              />
-
-              {navegacion.slice(9).map((item) => (
-              <Route
-                key={item.ruta}
-                path={item.ruta}
-                element={
-                  <ModuloPendiente
-                    titulo={item.nombre}
-                  />
-                }
-              />
-            ))}
+            <Route
+              path="/configuracion"
+              element={
+                <div className="page-content">
+                  <Configuracion />
+                </div>
+              }
+            />
 
             <Route
               path="*"

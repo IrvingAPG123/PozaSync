@@ -11,8 +11,16 @@ from src.routes.solicitudes import router as solicitudes_router
 from src.routes.conversaciones import router as conversaciones_router
 from src.routes.servicios import router as servicios_router
 from src.routes.resenas import router as resenas_router
+
 from src.routes.admin import router as admin_router
 from src.routes.admin_solicitudes import router as admin_solicitudes_router
+from src.routes.admin_servicios import router as admin_servicios_router
+from src.routes.admin_resenas import router as admin_resenas_router
+from src.routes.admin_estadisticas import router as admin_estadisticas_router
+from src.routes.admin_reportes import router as admin_reportes_router
+from src.routes.admin_configuracion import router as admin_configuracion_router
+
+from src.routes.acceso_web import router as acceso_web_router
 
 
 # ==========================================
@@ -63,17 +71,35 @@ app.add_middleware(
 
 
 # ==========================================
-# REGISTRAR RUTAS
+# REGISTRAR RUTAS DE AUTENTICACION
 # ==========================================
 
 app.include_router(auth_router)
+app.include_router(acceso_web_router)
+
+
+# ==========================================
+# REGISTRAR RUTAS DE LA APLICACION
+# ==========================================
+
 app.include_router(tecnicos_router)
 app.include_router(solicitudes_router)
 app.include_router(conversaciones_router)
 app.include_router(servicios_router)
 app.include_router(resenas_router)
+
+
+# ==========================================
+# REGISTRAR RUTAS ADMINISTRATIVAS
+# ==========================================
+
 app.include_router(admin_router)
 app.include_router(admin_solicitudes_router)
+app.include_router(admin_servicios_router)
+app.include_router(admin_resenas_router)
+app.include_router(admin_estadisticas_router)
+app.include_router(admin_reportes_router)
+app.include_router(admin_configuracion_router)
 
 
 # ==========================================
@@ -175,25 +201,9 @@ def obtener_tecnicos():
             detail="No se pudieron consultar los tecnicos",
         )
 
-from src.routes.admin_servicios import router as admin_servicios_router
 
-app.include_router(admin_servicios_router)
-
-
-from src.routes.admin_resenas import router as admin_resenas_router
-app.include_router(admin_resenas_router)
-
-
-from src.routes.admin_estadisticas import router as admin_estadisticas_router
-
-app.include_router(admin_estadisticas_router)
-
-from src.routes.admin_reportes import router as admin_reportes_router
-app.include_router(admin_reportes_router)
-
-from src.routes.admin_configuracion import router as admin_configuracion_router
-
-app.include_router(admin_configuracion_router)
-
+# ==========================================
 # PROTECCION GENERAL HTTP
+# ==========================================
+
 instalar_seguridad_http(app)

@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -73,14 +74,7 @@ function obtenerDetalle(detail: unknown): string {
 // REDIRECCION ADMINISTRATIVA
 // ==========================================
 
-function abrirPanelAdministrativo(codigo: string) {
-
-  if (Platform.OS !== 'web') {
-
-    throw new Error(
-      'El acceso administrativo solo está disponible en la aplicación web.'
-    );
-  }
+async function abrirPanelAdministrativo(codigo: string): Promise<void> {
 
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(codigo)) {
 
@@ -97,7 +91,11 @@ function abrirPanelAdministrativo(codigo: string) {
 
   if (
     destino.protocol !== 'https:' &&
-    !(esLocal && destino.protocol === 'http:')
+    !(
+      Platform.OS === 'web' &&
+      esLocal &&
+      destino.protocol === 'http:'
+    )
   ) {
 
     throw new Error(
@@ -109,7 +107,12 @@ function abrirPanelAdministrativo(codigo: string) {
     codigo_acceso: codigo,
   }).toString();
 
-  window.location.replace(destino.toString());
+  if (Platform.OS === 'web') {
+    window.location.replace(destino.toString());
+    return;
+  }
+
+  await Linking.openURL(destino.toString());
 }
 
 
@@ -320,10 +323,7 @@ export default function InicioSesion() {
       // 1. SELECCIONAR ENDPOINT
       // ====================================
 
-      const endpoint =
-        Platform.OS === 'web'
-          ? '/auth/login-web'
-          : '/auth/login';
+      const endpoint = '/auth/login-web';
 
 
       // ====================================
@@ -407,13 +407,10 @@ export default function InicioSesion() {
 
 
       // ====================================
-      // 4. ACCESO ADMINISTRATIVO WEB
+      // 4. ACCESO ADMINISTRATIVO
       // ====================================
 
-      if (
-        Platform.OS === 'web' &&
-        datos?.rol === 'administrador'
-      ) {
+      if (datos?.rol === 'administrador') {
 
         const codigo = datos.codigo_acceso;
 
@@ -429,9 +426,9 @@ export default function InicioSesion() {
 
         setContrasena('');
 
-        abrirPanelAdministrativo(codigo);
+        await abrirPanelAdministrativo(codigo);
 
-        redirigiendo = true;
+        redirigiendo = Platform.OS === 'web';
 
         return;
       }
@@ -491,10 +488,7 @@ export default function InicioSesion() {
         );
       }
 
-      if (
-        Platform.OS === 'web' &&
-        datos.rol !== perfil.rol
-      ) {
+      if (datos.rol !== perfil.rol) {
 
         throw new Error(
           'El rol de la sesión no coincide con el perfil.'

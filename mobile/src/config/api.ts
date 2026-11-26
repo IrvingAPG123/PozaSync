@@ -35,6 +35,8 @@ export const API_URL = (
 // ==========================================
 
 export const ADMIN_URL = (
-  process.env.EXPO_PUBLIC_ADMIN_URL ||
-  (__DEV__ ? ADMIN_LOCAL : ADMIN_PRODUCCION)
+  Platform.OS === 'web'
+    ? process.env.EXPO_PUBLIC_ADMIN_URL ||
+      (__DEV__ ? ADMIN_LOCAL : ADMIN_PRODUCCION)
+    : ADMIN_PRODUCCION
 ).replace(/\/+$/, '');

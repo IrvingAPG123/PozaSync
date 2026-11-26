@@ -1,14 +1,11 @@
+import { API_URL } from '../config/api';
 
 import { Platform } from 'react-native';
 
 const CLAVE_TOKEN = 'pozasync_token';
 const CLAVE_SESION = 'pozasync_sesion_v2';
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://127.0.0.1:8001'
-    : process.env.EXPO_PUBLIC_API_URL ||
-      'http://127.0.0.1:8001';
+
 
 const DURACION_ACCESO = 55 * 60 * 1000;
 

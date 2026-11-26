@@ -1,3 +1,4 @@
+import { API_URL } from '../config/api';
 import FormularioDesplazable from '../components/FormularioDesplazable';
 import { adjuntarImagen, enviarFormularioImagen } from '../services/imagenes';
 import { obtenerToken, borrarToken } from '../services/tokenStorage';
@@ -24,11 +25,7 @@ import * as ImagePicker from 'expo-image-picker';
 // CONFIGURACIÓN DE FASTAPI Y SESIÓN
 // ==========================================
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://127.0.0.1:8001'
-    : process.env.EXPO_PUBLIC_API_URL ||
-      'http://127.0.0.1:8001';
+
 
 
 async function solicitarAPI(

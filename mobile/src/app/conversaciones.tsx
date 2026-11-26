@@ -1,3 +1,4 @@
+import { API_URL } from '../config/api';
 import { interpretarFechaUTC } from '../services/fechas';
 import { obtenerToken } from '../services/tokenStorage';
 
@@ -23,11 +24,7 @@ import {
   useFocusEffect,
 } from 'expo-router';
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://127.0.0.1:8001'
-    : process.env.EXPO_PUBLIC_API_URL ||
-      'http://127.0.0.1:8001';
+
 
 type Conversacion = {
   id: string;

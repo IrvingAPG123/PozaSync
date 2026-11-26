@@ -1,3 +1,4 @@
+import { API_URL } from '../config/api';
 import FormularioDesplazable from '../components/FormularioDesplazable';
 
 import React, { useState } from 'react';
@@ -18,11 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import { buscarColonias, normalizarBusqueda } from '../constants/colonias';
 import { obtenerUbicacion } from '../services/ubicacion';
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://127.0.0.1:8001'
-    : process.env.EXPO_PUBLIC_API_URL ||
-      'http://127.0.0.1:8001';
+
 
 type Rol = 'cliente' | 'tecnico';
 

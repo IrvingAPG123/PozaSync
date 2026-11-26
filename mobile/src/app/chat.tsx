@@ -1,3 +1,4 @@
+import { API_URL } from '../config/api';
 import { interpretarFechaUTC } from '../services/fechas';
 import { adjuntarImagen, enviarFormularioImagen } from '../services/imagenes';
 import { obtenerToken } from '../services/tokenStorage';
@@ -14,6 +15,7 @@ import {
   AppState,
   Alert,
   Image,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -38,11 +40,7 @@ import {
 // CONFIGURACION DE LA API
 // ==========================================
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://127.0.0.1:8001'
-    : process.env.EXPO_PUBLIC_API_URL ||
-      'http://127.0.0.1:8001';
+
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -327,6 +325,11 @@ export default function Chat() {
 
   const [servicio, setServicio] =
     useState<Servicio | null>(null);
+
+  const [
+    mostrarSeguimiento,
+    setMostrarSeguimiento,
+  ] = useState(false);
 
   const [resena, setResena] =
     useState<Resena | null>(null);
@@ -1825,6 +1828,53 @@ export default function Chat() {
           </Pressable>
         </View>
 
+        {/* SEGUIMIENTO PERMANENTE DEL SERVICIO */}
+
+        {conversacion && usuario ? (
+          <Pressable
+            style={styles.botonSeguimiento}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir seguimiento del servicio"
+            onPress={() => {
+              Keyboard.dismiss();
+              setError('');
+              setMostrarSeguimiento(true);
+              void cargarServicio();
+            }}
+          >
+            <View style={styles.iconoSeguimiento}>
+              <Ionicons
+                name="clipboard-outline"
+                size={23}
+                color={C.azul}
+              />
+            </View>
+
+            <View style={styles.datosSeguimiento}>
+              <Text style={styles.tituloSeguimiento}>
+                Seguimiento del servicio
+              </Text>
+
+              <Text
+                style={styles.estadoSeguimiento}
+                numberOfLines={1}
+              >
+                {cargandoServicio
+                  ? 'Consultando estado...'
+                  : servicio
+                    ? nombreEstado(servicio.estado)
+                    : 'Sin acuerdo de servicio'}
+              </Text>
+            </View>
+
+            <Ionicons
+              name="chevron-forward"
+              size={22}
+              color={C.azul}
+            />
+          </Pressable>
+        ) : null}
+
         {/* MENSAJES */}
 
         <ScrollView
@@ -1841,8 +1891,6 @@ export default function Chat() {
             });
           }}
         >
-          {renderizarServicio()}
-
           {mensajes.length === 0 ? (
             <View style={styles.sinMensajes}>
               <Ionicons
@@ -1961,7 +2009,7 @@ export default function Chat() {
 
         {/* ERRORES */}
 
-        {error ? (
+        {error && !mostrarSeguimiento ? (
           <View style={styles.avisoError}>
             <Ionicons
               name="alert-circle-outline"
@@ -2138,6 +2186,96 @@ export default function Chat() {
         )}
       </View>
 
+      {/* VENTANA DE SEGUIMIENTO DEL SERVICIO */}
+
+      <Modal
+        visible={mostrarSeguimiento}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          Keyboard.dismiss();
+          setMostrarSeguimiento(false);
+        }}
+      >
+        <View style={styles.fondoSeguimiento}>
+          <View style={styles.ventanaSeguimiento}>
+
+            <View style={styles.cabeceraSeguimiento}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tituloVentanaSeguimiento}>
+                  Seguimiento del servicio
+                </Text>
+
+                <Text
+                  style={styles.secundario}
+                  numberOfLines={2}
+                >
+                  {conversacion?.titulo_solicitud ||
+                    'Solicitud de servicio'}
+                </Text>
+              </View>
+
+              <Pressable
+                style={styles.botonIcono}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar seguimiento"
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setMostrarSeguimiento(false);
+                }}
+              >
+                <Ionicons
+                  name="close-outline"
+                  size={28}
+                  color={C.oscuro}
+                />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.scrollSeguimiento}
+              contentContainerStyle={
+                styles.contenidoSeguimiento
+              }
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator
+            >
+              {error ? (
+                <View style={styles.avisoError}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={18}
+                    color={C.rojo}
+                  />
+
+                  <Text style={styles.textoError}>
+                    {error}
+                  </Text>
+                </View>
+              ) : null}
+
+              {renderizarServicio()}
+            </ScrollView>
+
+            <View style={styles.pieSeguimiento}>
+              <Pressable
+                style={styles.botonCerrarSeguimiento}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setMostrarSeguimiento(false);
+                }}
+              >
+                <Text style={styles.textoCerrarSeguimiento}>
+                  Volver a la conversación
+                </Text>
+              </Pressable>
+            </View>
+
+          </View>
+        </View>
+      </Modal>
+
       {/* VISOR DE FOTOGRAFIAS */}
 
       <Modal
@@ -2183,6 +2321,115 @@ export default function Chat() {
 // ==========================================
 
 const styles = StyleSheet.create({
+
+  botonSeguimiento: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 12,
+    marginVertical: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: C.azulClaro,
+  },
+
+  iconoSeguimiento: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: C.blanco,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  datosSeguimiento: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+
+  tituloSeguimiento: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: C.azul,
+  },
+
+  estadoSeguimiento: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.gris,
+  },
+
+  fondoSeguimiento: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+
+  ventanaSeguimiento: {
+    width: '100%',
+    maxWidth: 540,
+    maxHeight: '90%',
+    minHeight: 0,
+    backgroundColor: C.blanco,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+
+  cabeceraSeguimiento: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.borde,
+  },
+
+  tituloVentanaSeguimiento: {
+    color: C.oscuro,
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+
+  scrollSeguimiento: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minHeight: 0,
+  },
+
+  contenidoSeguimiento: {
+    padding: 16,
+    gap: 12,
+  },
+
+  pieSeguimiento: {
+    flexShrink: 0,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: C.borde,
+  },
+
+  botonCerrarSeguimiento: {
+    padding: 13,
+    borderRadius: 10,
+    backgroundColor: C.azulClaro,
+    alignItems: 'center',
+  },
+
+  textoCerrarSeguimiento: {
+    color: C.azul,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+
   pantalla: {
     flex: 1,
     backgroundColor: C.fondo,

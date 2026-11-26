@@ -1,3 +1,4 @@
+import { API_URL } from '../config/api';
 import FormularioDesplazable from '../components/FormularioDesplazable';
 import { obtenerToken } from '../services/tokenStorage';
 
@@ -17,11 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://127.0.0.1:8001'
-    : process.env.EXPO_PUBLIC_API_URL ||
-      'http://127.0.0.1:8001';
+
 
 const CATEGORIAS = [
   { id: 'electricidad', nombre: 'Electricidad' },

@@ -1,3 +1,4 @@
+import { API_URL } from '../config/api';
 import { obtenerToken, borrarToken } from '../services/tokenStorage';
 
 import React, { useCallback, useState } from 'react';
@@ -15,11 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://127.0.0.1:8001'
-    : process.env.EXPO_PUBLIC_API_URL ||
-      'http://127.0.0.1:8001';
+
 
 
 type Usuario = {
